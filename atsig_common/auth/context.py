@@ -10,6 +10,10 @@ class SecretaryContext:
     department_id: int
     programme_ids: list[int]
 
+@dataclass
+class AgentContext:
+    sub_agents: list[str]
+    applicants: list[str]
 
 @dataclass
 class BaseAuthContext:
@@ -48,7 +52,20 @@ class BaseAuthContext:
     def is_applicant(self):
         return self.has_group(GroupEnum.APPLICANT)
 
+    @property
+    def is_agent(self) -> bool:
+        return self.is_parent_agent or self.is_child_agent
+
+    @property
+    def is_child_agent(self) -> bool:
+        return self.has_group(GroupEnum.CHILD_AGENT)
+
+    @property
+    def is_parent_agent(self) -> bool:
+        return self.has_group(GroupEnum.PARENT_AGENT)
+
     secretary: SecretaryContext | None = None
+    agent: AgentContext | None = None
 
     async def load_role_contexts(self, session: AsyncSession) -> "AuthContext":
         """
@@ -59,7 +76,13 @@ class BaseAuthContext:
         if self.is_secretary and self.secretary is None:
             self.secretary = await self.load_secretary_context(session=session)
 
+        if self.is_agent and self.agent is None:
+            self.agent = await self.load_agent_context(session=session)
+
         return self
 
     async def load_secretary_context(self, session: AsyncSession) -> SecretaryContext:
+        pass
+
+    async def load_agent_context(self, session: AsyncSession) -> AgentContext:
         pass

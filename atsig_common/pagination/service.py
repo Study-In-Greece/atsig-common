@@ -1,3 +1,5 @@
+from typing import Optional, Type, Any
+
 from sqlalchemy import select, func, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from .schemas import PaginationParams, PaginatedResponse
@@ -19,54 +21,68 @@ def build_paginated_response(
 
 
 async def paginate_raw(
-        query,
-        model,
+        query: Any,
+        model: Type[Any],
         session: AsyncSession,
         pagination: PaginationParams,
+        sort_model: Optional[Type[Any]] = None,
         default_sort: str = "id",
         default_order: str = "asc",
 ):
-    """Returns data and total count with dynamic sorting"""
+    """Returns data and total count with dynamic sorting and reliable fallbacks."""
+
     # 1. Get Total Count
-    total = (
-            await session.scalar(select(func.count()).select_from(query.subquery())) or 0
-    )
+    total = await session.scalar(select(func.count()).select_from(query.subquery())) or 0
 
     # 2. Handle Dynamic Sorting
     sort_attr = pagination.sort or default_sort
     order_type = pagination.order or default_order
+    effective_sort_model = sort_model or model
 
-    sort_column = getattr(model, sort_attr, None)
+    # Προσπάθεια εύρεσης της στήλης
+    sort_column = getattr(effective_sort_model, sort_attr, None)
 
-    # Αν το πεδίο sort δεν υπάρχει στο μοντέλο, πέφτουμε στο default_sort (συνήθως id)
+    # Fallback στο βασικό μοντέλο αν δώσαμε sort_model αλλά δεν βρέθηκε εκεί η στήλη
+    if sort_column is None and sort_model is not None:
+        sort_column = getattr(model, sort_attr, None)
+
+    # Αν ακόμα δεν βρέθηκε (π.χ. λάθος string στο sort), ψάχνουμε id ή created_at
     if sort_column is None:
-        sort_column = getattr(model, default_sort)
-        order_type = default_order
+        sort_attr = "id"  # Reset το attribute name για το deterministic check παρακάτω
+        sort_column = getattr(model, "id", None) or getattr(model, "created_at", None)
 
-    # Εφαρμογή sorting
+    # 3. Εφαρμογή Sorting
     order_func = asc if order_type == "asc" else desc
-    query = query.order_by(order_func(sort_column))
 
-    # Προσθήκη δευτερεύοντος sorting για σταθερά αποτελέσματα (Deterministic)
-    if sort_attr != "id" and hasattr(model, "id"):
-        query = query.order_by(desc(model.id))
+    if sort_column is not None:
+        query = query.order_by(order_func(sort_column))
 
-    # 3. Apply Limit/Offset
+        # Προσθήκη δευτερεύοντος sorting (Deterministic)
+        # Μόνο αν δεν ταξινομούμε ήδη βάσει id/created_at
+        if sort_attr not in ["id", "created_at"]:
+            secondary_col = getattr(model, "id", None) or getattr(model, "created_at", None)
+            if secondary_col is not None:
+                query = query.order_by(desc(secondary_col))
+    else:
+        # Αν όλα αποτύχουν, μην κρασάρεις, απλώς μην κάνεις sort ή βάλε ένα default
+        pass
+
+    # 4. Apply Limit/Offset
     query = query.offset(pagination.offset).limit(pagination.limit)
     results = (await session.execute(query)).scalars().all()
 
     return results, total
-
 
 async def paginate_query(
         query,
         model,
         session: AsyncSession,
         pagination: PaginationParams,
+        sort_model: Optional[Type[Any]] = None,
         default_sort: str = "id",
         default_order: str = "asc",
 ):
     results, total = await paginate_raw(
-        query, model, session, pagination, default_sort, default_order
+        query, model, session, pagination, sort_model, default_sort, default_order
     )
     return build_paginated_response(pagination, total, results)
