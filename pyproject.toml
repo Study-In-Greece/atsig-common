@@ -1,0 +1,71 @@
+[project]
+name = "atsig-common"
+version = "0.1.0"
+description = "Shared utilities for ATSIG microservices"
+authors = [
+    { name = "th-papaz" }
+]
+requires-python = ">=3.13"
+
+# 🔹 ΜΟΝΟ τα απολύτως απαραίτητα
+dependencies = [
+    "pydantic>=2.12.0,<3.0.0",
+]
+
+# 🔹 Optional groups (install μόνο ό,τι χρειάζεται κάθε service)
+[project.optional-dependencies]
+
+fastapi = [
+    "fastapi==0.128.0",
+    "starlette==0.50.0",
+]
+
+db = [
+    "SQLAlchemy==2.0.45",
+    "asyncpg==0.31.0",
+    "alembic>=1.16,<2.0",
+]
+
+redis = [
+    "redis==7.1.0",
+]
+
+http = [
+    "httpx==0.28.1",
+]
+
+auth = [
+    "python-keycloak==6.0.0",
+    "cryptography>=46.0.0",
+]
+
+email = [
+    "fastapi_mail==1.6.1",
+]
+
+files = [
+    "aiofiles==25.1.0",
+    "python-multipart==0.0.21",
+]
+
+observability = [
+    "sentry-sdk==2.54.0",
+]
+
+cli = [
+    "typer>=0.21,<1.0",
+]
+
+# 🔹 Dev tools (μόνο για το shared repo)
+dev = [
+    "black==25.12.0",
+]
+
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# 🔹 setuptools config για να βρίσκει το package
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atsig_common*"]
