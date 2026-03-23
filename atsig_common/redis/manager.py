@@ -72,3 +72,10 @@ class RedisManager:
 
     async def hdel(self, key: str, *keys: str):
         await self.redis.hdel(key, *keys)
+
+    def __getattr__(self, name):
+        """
+        Αν κάποιος καλέσει μια μέθοδο που δεν υπάρχει στον Manager (π.χ. xadd),
+        στείλε την απευθείας στο εσωτερικό redis object.
+        """
+        return getattr(self.redis, name)
