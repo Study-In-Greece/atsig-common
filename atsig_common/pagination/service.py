@@ -1,10 +1,10 @@
 from sqlalchemy import select, func, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from .schemas import Pagination, PaginatedResponse
+from .schemas import PaginationParams, PaginatedResponse
 
 
 def build_paginated_response(
-    pagination: Pagination, total: int, items: list
+        pagination: PaginationParams, total: int, items: list
 ) -> PaginatedResponse:
     total_pages = (total + pagination.limit - 1) // pagination.limit if total > 0 else 0
     return PaginatedResponse(
@@ -19,17 +19,17 @@ def build_paginated_response(
 
 
 async def paginate_raw(
-    query,
-    model,
-    session: AsyncSession,
-    pagination: Pagination,
-    default_sort: str = "id",
-    default_order: str = "asc",
+        query,
+        model,
+        session: AsyncSession,
+        pagination: PaginationParams,
+        default_sort: str = "id",
+        default_order: str = "asc",
 ):
     """Returns data and total count with dynamic sorting"""
     # 1. Get Total Count
     total = (
-        await session.scalar(select(func.count()).select_from(query.subquery())) or 0
+            await session.scalar(select(func.count()).select_from(query.subquery())) or 0
     )
 
     # 2. Handle Dynamic Sorting
@@ -59,12 +59,12 @@ async def paginate_raw(
 
 
 async def paginate_query(
-    query,
-    model,
-    session: AsyncSession,
-    pagination: Pagination,
-    default_sort: str = "id",
-    default_order: str = "asc",
+        query,
+        model,
+        session: AsyncSession,
+        pagination: PaginationParams,
+        default_sort: str = "id",
+        default_order: str = "asc",
 ):
     results, total = await paginate_raw(
         query, model, session, pagination, default_sort, default_order
