@@ -10,6 +10,7 @@ requires-python = ">=3.13"
 # 🔹 ΜΟΝΟ τα απολύτως απαραίτητα
 dependencies = [
     "pydantic>=2.12.0,<3.0.0",
+    "pydantic-settings>=2.7.0"
 ]
 
 # 🔹 Optional groups (install μόνο ό,τι χρειάζεται κάθε service)
@@ -59,6 +60,10 @@ cli = [
 # 🔹 Dev tools (μόνο για το shared repo)
 dev = [
     "black==25.12.0",
+]
+
+all = [
+    "atsig-common[fastapi,db,redis,http,auth,email,files,observability,cli]"
 ]
 
 [build-system]
