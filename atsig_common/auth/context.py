@@ -9,11 +9,19 @@ from .groups import GroupEnum
 class SecretaryContext:
     department_id: int
     programme_ids: list[int]
+    call_ids: list[int]
+
+
+@dataclass
+class EvaluatorContext:
+    call_ids: list[int]
+
 
 @dataclass
 class AgentContext:
     sub_agents: list[str]
     applicants: list[str]
+
 
 @dataclass
 class BaseAuthContext:
@@ -66,6 +74,7 @@ class BaseAuthContext:
 
     secretary: SecretaryContext | None = None
     agent: AgentContext | None = None
+    evaluator: EvaluatorContext | None = None
 
     async def load_role_contexts(self, session: AsyncSession) -> "AuthContext":
         """
@@ -79,10 +88,16 @@ class BaseAuthContext:
         if self.is_agent and self.agent is None:
             self.agent = await self.load_agent_context(session=session)
 
+        if self.is_evaluator and self.evaluator is None:
+            self.evaluator = await self.load_evaluator_context(session=session)
+
         return self
 
     async def load_secretary_context(self, session: AsyncSession) -> SecretaryContext:
         pass
 
     async def load_agent_context(self, session: AsyncSession) -> AgentContext:
+        pass
+
+    async def load_evaluator_context(self, session: AsyncSession) -> EvaluatorContext:
         pass
