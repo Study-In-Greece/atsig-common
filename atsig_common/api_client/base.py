@@ -1,7 +1,7 @@
 import httpx
-from fastapi import HTTPException
 
 from .http_manager import HttpClientManager
+from ..exceptions import AtsigError, UnauthorizedError, ForbiddenError, NotFoundError
 
 
 class BaseAPI:
@@ -40,30 +40,41 @@ class BaseAPI:
         }
 
         try:
-            response = await manager.client.request(
+            response = await self.http_manager.client.request(
                 method, url, headers=request_headers, **kwargs
             )
-            if response.status_code == 200:
+
+            # Αν όλα πήγαν καλά (2xx)
+            if response.is_success:
                 if raw:
                     return response.content
-                # Return JSON if possible
                 if "application/json" in response.headers.get("Content-Type", ""):
                     return response.json()
                 return response.text
+
+            # Αν έχουμε σφάλμα, κάνουμε map στα δικά μας Exceptions
+            try:
+                error_data = response.json()
+                detail = (
+                    error_data.get("detail")
+                    or error_data.get("message")
+                    or response.text
+                )
+            except Exception:
+                detail = response.text
+
+            if response.status_code == 404:
+                raise NotFoundError(detail)
+            elif response.status_code == 403:
+                raise ForbiddenError(detail)
+            elif response.status_code == 401:
+                raise UnauthorizedError(detail)
             else:
-                # Attempt to parse JSON error detail if possible
-                try:
-                    error_json = response.json()
-                    detail = (
-                        error_json.get("detail")
-                        or error_json.get("message")
-                        or response.text
-                    )
-                except Exception:
-                    detail = response.text
-                raise HTTPException(status_code=response.status_code, detail=detail)
+                raise AtsigError(f"Remote API Error ({response.status_code}): {detail}")
+
         except httpx.RequestError as e:
-            raise HTTPException(status_code=500, detail=f"Request error: {e}")
+            # Σφάλματα δικτύου (timeout, DNS, κλπ)
+            raise AtsigError(f"Network error while calling {url}: {str(e)}")
 
     async def get(self, endpoint: str, params: dict = None, **kwargs):
         return await self._request("GET", endpoint, params=params, **kwargs)
