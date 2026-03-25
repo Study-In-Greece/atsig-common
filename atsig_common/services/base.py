@@ -21,7 +21,9 @@ class BaseService:
         self.session = session
 
 
-class CRUDBaseService(BaseService, Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+class CRUDBaseService(
+    BaseService, Generic[ModelType, CreateSchemaType, UpdateSchemaType]
+):
     """The pure Database CRUD engine"""
 
     def __init__(self, model: Type[ModelType], session: AsyncSession):
@@ -38,7 +40,9 @@ class CRUDBaseService(BaseService, Generic[ModelType, CreateSchemaType, UpdateSc
     async def get(self, resource_id: Any) -> Optional[ModelType]:
         return await self.session.get(self.model, resource_id)
 
-    async def get_multi(self, *, query=None, pagination: PaginationParams) -> PaginatedResponse:
+    async def get_multi(
+        self, *, query=None, pagination: PaginationParams
+    ) -> PaginatedResponse:
         if query is None:
             query = select(self.model)
         return await paginate_query(query, self.model, self.session, pagination)
@@ -50,8 +54,14 @@ class CRUDBaseService(BaseService, Generic[ModelType, CreateSchemaType, UpdateSc
         await self.session.refresh(db_obj)
         return db_obj
 
-    async def update(self, *, db_obj: ModelType, obj_in: Union[UpdateSchemaType, Dict[str, Any]]) -> ModelType:
-        update_data = obj_in if isinstance(obj_in, dict) else obj_in.model_dump(exclude_unset=True)
+    async def update(
+        self, *, db_obj: ModelType, obj_in: Union[UpdateSchemaType, Dict[str, Any]]
+    ) -> ModelType:
+        update_data = (
+            obj_in
+            if isinstance(obj_in, dict)
+            else obj_in.model_dump(exclude_unset=True)
+        )
         for field in update_data:
             if hasattr(db_obj, field):
                 setattr(db_obj, field, update_data[field])
@@ -59,7 +69,9 @@ class CRUDBaseService(BaseService, Generic[ModelType, CreateSchemaType, UpdateSc
         await self.session.refresh(db_obj)
         return db_obj
 
-    async def find_and_update(self, resource_id: Any, obj_in: Union[UpdateSchemaType, Dict[str, Any]]) -> ModelType:
+    async def find_and_update(
+        self, resource_id: Any, obj_in: Union[UpdateSchemaType, Dict[str, Any]]
+    ) -> ModelType:
         """Fetch and Update in one call (ideal for Uni API)"""
         db_obj = await self._get_or_404(resource_id)
         return await self.update(db_obj=db_obj, obj_in=obj_in)
@@ -92,19 +104,22 @@ class BaseAuthService(BaseService, Generic[PolicyType]):
 
 class CRUDBaseAuthService(
     CRUDBaseService[ModelType, CreateSchemaType, UpdateSchemaType],
-    Generic[ModelType, CreateSchemaType, UpdateSchemaType, PolicyType]
+    Generic[ModelType, CreateSchemaType, UpdateSchemaType, PolicyType],
 ):
     """CRUD + Auth Policy"""
 
-    def __init__(self, model: Type[ModelType], session: AsyncSession, policy: Optional[PolicyType] = None):
+    def __init__(
+        self,
+        model: Type[ModelType],
+        session: AsyncSession,
+        policy: Optional[PolicyType] = None,
+    ):
         super().__init__(model, session)
         self.policy = policy
         self.ctx = policy.ctx if policy else None
 
     async def get_authorized(
-            self,
-            resource_id: Any,
-            check_callback: Callable[[ModelType, PolicyType], None]
+        self, resource_id: Any, check_callback: Callable[[ModelType, PolicyType], None]
     ) -> ModelType:
         db_obj = await self._get_or_404(resource_id)
 
