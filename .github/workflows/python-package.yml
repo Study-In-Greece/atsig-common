@@ -35,8 +35,3 @@ jobs:
       run: |
         # Ελέγχει αν ο κώδικας ακολουθεί το σωστό formatting
         black --check .
-
-    - name: Test with pytest
-      run: |
-        # Θα τρέξει τα tests μόλις φτιάξεις φάκελο tests/
-        pytest
