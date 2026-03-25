@@ -1,0 +1,42 @@
+name: Atsig Common CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Εδώ βάζουμε τη version που χρησιμοποιούμε στα Dockerfiles μας
+        python-version: ["3.13"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Εγκατάσταση του πακέτου σε editable mode με όλα τα extras
+        pip install -e ".[all]"
+        # Εγκατάσταση εργαλείων για testing και linting
+        pip install pytest black
+
+    - name: Lint with Black
+      run: |
+        # Ελέγχει αν ο κώδικας ακολουθεί το σωστό formatting
+        black --check .
+
+    - name: Test with pytest
+      run: |
+        # Θα τρέξει τα tests μόλις φτιάξεις φάκελο tests/
+        pytest
