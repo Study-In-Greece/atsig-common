@@ -42,26 +42,16 @@ class UsersAPI(BaseAPI):
         )
 
     async def save_user(self, data: dict):
-        return await self.post(
-            endpoint=f"/users", json=data
-        )
+        return await self.post(endpoint=f"/users", json=data)
 
     async def get_applicant(self, applicant_id: str):
-        return await self.get(
-            endpoint=f"/applicants/{applicant_id}"
-        )
+        return await self.get(endpoint=f"/applicants/{applicant_id}")
 
     async def get_agent(self, agent_id: str):
-        return await self.get(
-            endpoint=f"/agents/{agent_id}"
-        )
+        return await self.get(endpoint=f"/agents/{agent_id}")
 
     async def get_applicant_profile(self, applicant_id: str):
-        return await self.get(
-            endpoint=f"/applicants/{applicant_id}/complete"
-        )
+        return await self.get(endpoint=f"/applicants/{applicant_id}/complete")
 
     async def get_applicant_photo(self, photo_path: str):
-        return await self.get_raw(
-            endpoint=f"/media/{photo_path}"
-        )
+        return await self.get_raw(endpoint=f"/media/{photo_path}")

@@ -26,9 +26,9 @@ class BaseOptionalAuthService(BaseService, Generic[PolicyType]):
     """Optional Auth Policy"""
 
     def __init__(
-            self,
-            session: AsyncSession,
-            policy: Optional[PolicyType] = None,
+        self,
+        session: AsyncSession,
+        policy: Optional[PolicyType] = None,
     ):
         super().__init__(session)
         self.policy: Optional[PolicyType] = policy
