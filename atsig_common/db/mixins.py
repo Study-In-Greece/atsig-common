@@ -7,13 +7,15 @@ class TimestampMixin:
 
     created_at = Column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        default=func.now(),  # Python-side default (Safe-guard)
+        server_default=func.now(),  # Database-side default
         nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        default=func.now(),  # Python-side default
+        server_default=func.now(),  # Database-side default
+        onupdate=func.now(),  # Refreshes on every update
         nullable=False,
     )
 
