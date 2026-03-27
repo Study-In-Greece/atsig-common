@@ -47,34 +47,56 @@ class CRUDBaseService(
             query = select(self.model)
         return await paginate_query(query, self.model, self.session, pagination)
 
-    async def create(self, *, obj_in: CreateSchemaType) -> ModelType:
-        db_obj = self.model(**obj_in.model_dump())
+    async def create(
+        self, *, obj_in: CreateSchemaType, exclude: Optional[set[str]] = None
+    ) -> ModelType:
+        """
+        Creates a new record, allowing exclusion of non-model fields.
+        """
+        # Convert schema to dict, applying the exclusion
+        data = obj_in.model_dump(exclude=exclude)
+
+        db_obj = self.model(**data)
         self.session.add(db_obj)
         await self.session.flush()
         await self.session.refresh(db_obj)
         return db_obj
 
     async def update(
-        self, *, db_obj: ModelType, obj_in: Union[UpdateSchemaType, Dict[str, Any]]
+        self,
+        *,
+        db_obj: ModelType,
+        obj_in: Union[UpdateSchemaType, Dict[str, Any]],
+        exclude: Optional[set[str]] = None,
     ) -> ModelType:
-        update_data = (
-            obj_in
-            if isinstance(obj_in, dict)
-            else obj_in.model_dump(exclude_unset=True)
-        )
+        """
+        Updates a record, allowing exclusion of non-model fields.
+        """
+        if isinstance(obj_in, dict):
+            update_data = obj_in
+            if exclude:
+                for field in exclude:
+                    update_data.pop(field, None)
+        else:
+            update_data = obj_in.model_dump(exclude_unset=True, exclude=exclude)
+
         for field in update_data:
             if hasattr(db_obj, field):
                 setattr(db_obj, field, update_data[field])
+
         await self.session.flush()
         await self.session.refresh(db_obj)
         return db_obj
 
     async def find_and_update(
-        self, resource_id: Any, obj_in: Union[UpdateSchemaType, Dict[str, Any]]
+        self,
+        resource_id: Any,
+        obj_in: Union[UpdateSchemaType, Dict[str, Any]],
+        exclude: Optional[set[str]] = None,
     ) -> ModelType:
         """Fetch and Update in one call (ideal for Uni API)"""
         db_obj = await self._get_or_404(resource_id)
-        return await self.update(db_obj=db_obj, obj_in=obj_in)
+        return await self.update(db_obj=db_obj, obj_in=obj_in, exclude=exclude)
 
     async def remove(self, *, resource_id: Any) -> None:
         db_obj = await self._get_or_404(resource_id)
