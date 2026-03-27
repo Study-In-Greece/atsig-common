@@ -1,6 +1,13 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from .exceptions import NotFoundError, ForbiddenError, UnauthorizedError
+from starlette.requests import Request
+
+from .exceptions import (
+    NotFoundError,
+    ForbiddenError,
+    UnauthorizedError,
+    BadRequestError,
+)
 
 
 def setup_exception_handlers(app: FastAPI):
@@ -15,3 +22,10 @@ def setup_exception_handlers(app: FastAPI):
     @app.exception_handler(UnauthorizedError)
     async def unauthorized_handler(_, exc: UnauthorizedError):
         return JSONResponse(status_code=401, content={"detail": exc.message})
+
+    @app.exception_handler(BadRequestError)
+    async def bad_request_handler(request: Request, exc: BadRequestError):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": str(exc)},
+        )

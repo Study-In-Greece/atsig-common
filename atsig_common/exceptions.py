@@ -14,3 +14,7 @@ class ForbiddenError(AtsigError):
 
 class UnauthorizedError(AtsigError):
     pass
+
+
+class BadRequestError(AtsigError):
+    pass
