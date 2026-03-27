@@ -1,31 +1,33 @@
-from sqlalchemy import Column, Integer, DateTime, func
-from sqlalchemy.orm import declared_attr
+from datetime import datetime
+from sqlalchemy import DateTime, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 class TimestampMixin:
-    """Mixin για created_at και updated_at"""
+    """Mixin for created_at and updated_at using Mapped"""
 
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=func.now(),  # Python-side default (Safe-guard)
-        server_default=func.now(),  # Database-side default
-        nullable=False,
+        insert_default=func.now(),  # Αντίστοιχο του default
+        server_default=func.now(),
     )
-    updated_at = Column(
+
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=func.now(),  # Python-side default
-        server_default=func.now(),  # Database-side default
-        onupdate=func.now(),  # Refreshes on every update
-        nullable=False,
+        insert_default=func.now(),
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
 
 class IDMixin:
-    """Mixin για το Primary Key"""
+    """Mixin for Primary Key using Mapped"""
 
-    id = Column(
-        Integer,
+    id: Mapped[int] = mapped_column(
         primary_key=True,
         autoincrement=True,
-        nullable=False,
     )
