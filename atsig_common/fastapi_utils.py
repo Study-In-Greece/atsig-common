@@ -7,6 +7,7 @@ from .exceptions import (
     ForbiddenError,
     UnauthorizedError,
     BadRequestError,
+    ConflictError,
 )
 
 
@@ -24,8 +25,15 @@ def setup_exception_handlers(app: FastAPI):
         return JSONResponse(status_code=401, content={"detail": exc.message})
 
     @app.exception_handler(BadRequestError)
-    async def bad_request_handler(request: Request, exc: BadRequestError):
+    async def bad_request_handler(_, exc: BadRequestError):
         return JSONResponse(
             status_code=400,
-            content={"detail": str(exc)},
+            content={"detail": exc.message},
+        )
+
+    @app.exception_handler(ConflictError)
+    async def conflict_handler(_, exc: ConflictError):
+        return JSONResponse(
+            status_code=409,
+            content={"detail": exc.message},
         )

@@ -18,3 +18,7 @@ class UnauthorizedError(AtsigError):
 
 class BadRequestError(AtsigError):
     pass
+
+
+class ConflictError(AtsigError):
+    pass

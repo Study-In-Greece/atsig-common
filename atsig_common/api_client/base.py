@@ -1,7 +1,14 @@
 import httpx
 
 from .http_manager import HttpClientManager
-from ..exceptions import AtsigError, UnauthorizedError, ForbiddenError, NotFoundError
+from ..exceptions import (
+    AtsigError,
+    UnauthorizedError,
+    ForbiddenError,
+    NotFoundError,
+    ConflictError,
+    BadRequestError,
+)
 
 
 class BaseAPI:
@@ -69,6 +76,10 @@ class BaseAPI:
                 raise ForbiddenError(detail)
             elif response.status_code == 401:
                 raise UnauthorizedError(detail)
+            elif response.status_code == 409:
+                raise ConflictError(detail)
+            elif response.status_code == 400:
+                raise BadRequestError(detail)
             else:
                 raise AtsigError(f"Remote API Error ({response.status_code}): {detail}")
 

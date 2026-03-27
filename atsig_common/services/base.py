@@ -41,11 +41,17 @@ class CRUDBaseService(
         return await self.session.get(self.model, resource_id)
 
     async def get_multi(
-        self, *, query=None, pagination: PaginationParams
+        self,
+        *,
+        query=None,
+        pagination: PaginationParams,
+        sort_model: Type[ModelType] = None,
     ) -> PaginatedResponse:
         if query is None:
             query = select(self.model)
-        return await paginate_query(query, self.model, self.session, pagination)
+        return await paginate_query(
+            query, self.model, self.session, pagination, sort_model=sort_model
+        )
 
     async def create(
         self,
