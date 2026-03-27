@@ -48,16 +48,25 @@ class CRUDBaseService(
         return await paginate_query(query, self.model, self.session, pagination)
 
     async def create(
-        self, *, obj_in: CreateSchemaType, exclude: Optional[set[str]] = None
+        self,
+        *,
+        obj_in: Union[CreateSchemaType, dict[str, Any]],
+        exclude: Optional[set[str]] = None,
+        **extra_data: Any,
     ) -> ModelType:
         """
         Creates a new record, allowing exclusion of non-model fields.
         """
-        # Convert schema to dict, applying the exclusion
-        data = obj_in.model_dump(exclude=exclude)
+        if isinstance(obj_in, dict):
+            data = obj_in
+        else:
+            data = obj_in.model_dump(exclude=exclude)
 
-        db_obj = self.model(**data)
+        final_data = {**data, **extra_data}
+
+        db_obj = self.model(**final_data)
         self.session.add(db_obj)
+
         await self.session.flush()
         await self.session.refresh(db_obj)
         return db_obj
