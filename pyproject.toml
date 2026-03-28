@@ -1,19 +1,17 @@
 [project]
 name = "atsig-common"
-version = "0.1.0"
+version = "0.1.6"
 description = "Shared utilities for ATSIG microservices"
 authors = [
     { name = "th-papaz" }
 ]
 requires-python = ">=3.13"
 
-# 🔹 ΜΟΝΟ τα απολύτως απαραίτητα
 dependencies = [
     "pydantic>=2.12.0,<3.0.0",
     "pydantic-settings>=2.7.0"
 ]
 
-# 🔹 Optional groups (install μόνο ό,τι χρειάζεται κάθε service)
 [project.optional-dependencies]
 
 fastapi = [
@@ -57,7 +55,7 @@ cli = [
     "typer>=0.21,<1.0",
 ]
 
-# 🔹 Dev tools (μόνο για το shared repo)
+# 🔹 Dev tools
 dev = [
     "black==25.12.0",
 ]
@@ -70,7 +68,7 @@ all = [
 requires = ["setuptools>=69.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# 🔹 setuptools config για να βρίσκει το package
+# 🔹 setuptools config
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["atsig_common*"]
