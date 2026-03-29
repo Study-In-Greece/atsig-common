@@ -27,7 +27,6 @@ class AgentContext:
 class BaseAuthContext:
     sub: str
     email: str
-    bearer_token: str
     groups: list[str]
     given_name: str
     family_name: str

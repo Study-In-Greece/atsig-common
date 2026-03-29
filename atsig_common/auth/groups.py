@@ -10,8 +10,8 @@ class GroupEnum(str, Enum):
     ADMIN = "/Administrators"
     HELPDESK = "/Helpdesk"
     AGENT = "/Agents"
-    PARENT_AGENT = "/Agent/Parent"
-    CHILD_AGENT = "/Agent/Child"
+    PARENT_AGENT = "/Agents/Parent"
+    CHILD_AGENT = "/Agents/Child"
 
 
 SUPER_GROUPS = [GroupEnum.HELPDESK.value, GroupEnum.ADMIN.value]
