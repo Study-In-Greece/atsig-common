@@ -1,6 +1,6 @@
+import logging
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from starlette.requests import Request
 
 from .exceptions import (
     NotFoundError,
@@ -8,10 +8,23 @@ from .exceptions import (
     UnauthorizedError,
     BadRequestError,
     ConflictError,
+    AtsigError,
 )
+
+logger = logging.getLogger("atsig-common")
 
 
 def setup_exception_handlers(app: FastAPI):
+
+    @app.exception_handler(AtsigError)
+    async def atsig_error_handler(_, exc: AtsigError):
+        logger.exception(f"AtsigError caught: {exc.message}")
+
+        return JSONResponse(
+            status_code=500,
+            content={"detail": exc.message},
+        )
+
     @app.exception_handler(NotFoundError)
     async def not_found_handler(_, exc: NotFoundError):
         return JSONResponse(status_code=404, content={"detail": exc.message})

@@ -1,6 +1,6 @@
 [project]
 name = "atsig-common"
-version = "0.1.7"
+version = "0.1.8"
 description = "Shared utilities for ATSIG microservices"
 authors = [
     { name = "th-papaz" }
