@@ -66,7 +66,7 @@ class CRUDBaseService(
         Raises:
             NotFoundError: If the object does not exist in the database.
         """
-        obj = await self.session.get(self.model, resource_id)
+        obj = await self.get(resource_id)
         if not obj:
             raise NotFoundError(f"{self.model.__name__} not found")
         return obj
