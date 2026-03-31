@@ -3,9 +3,14 @@ from typing import Any, Dict
 
 
 class ColorFormatter(logging.Formatter):
-    """Custom Formatter που προσθέτει χρώματα στο τερματικό"""
+    """
+    Custom logging formatter that adds ANSI color codes to terminal output.
 
-    # ANSI Colors
+    This formatter maps different logging levels to specific colors to improve
+    readability in development environments.
+    """
+
+    # ANSI Color Escape Codes
     GREY = "\x1b[38;20m"
     BLUE = "\x1b[34;20m"
     CYAN = "\x1b[36;20m"
@@ -14,10 +19,10 @@ class ColorFormatter(logging.Formatter):
     BOLD_RED = "\x1b[31;1m"
     RESET = "\x1b[0m"
 
-    # Το format που ζήτησες: Ημερομηνία - Level - Name - Message
-    # Το -8s ευθυγραμμίζει το Level (π.χ. INFO    vs WARNING )
+    # Base format string shared across all levels
     base_fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
+    # Mapping of logging levels to colored format strings
     FORMATS = {
         logging.DEBUG: GREY + base_fmt + RESET,
         logging.INFO: CYAN + base_fmt + RESET,
@@ -27,22 +32,53 @@ class ColorFormatter(logging.Formatter):
     }
 
     def format(self, record):
+        """
+        Formats the log record with the appropriate color based on its level.
+
+        Args:
+            record (logging.LogRecord): The log record to be formatted.
+
+        Returns:
+            str: The formatted and colorized log string.
+        """
         log_fmt = self.FORMATS.get(record.levelno, self.base_fmt)
         formatter = logging.Formatter(log_fmt, datefmt="%Y-%m-%d %H:%M:%S")
         return formatter.format(record)
 
 
 def get_logger(name: str):
+    """
+    Utility function to retrieve a standard logger instance.
+
+    Args:
+        name (str): The name of the logger, typically __name__.
+
+    Returns:
+        logging.Logger: The requested logger instance.
+    """
     return logging.getLogger(name)
 
 
 def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]:
+    """
+    Generates a comprehensive logging configuration dictionary.
+
+    This configuration is compatible with logging.config.dictConfig and is
+    specifically tailored for FastAPI/Uvicorn applications. It includes
+    separate handlers for general logs (pretty-printed) and access logs.
+
+    Args:
+        service_name (str): The name of the specific service logger to configure.
+        level (str): The global logging level (e.g., "DEBUG", "INFO"). Defaults to "INFO".
+
+    Returns:
+        Dict[str, Any]: A dictionary containing the full logging setup.
+    """
     return {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
             "pretty": {
-                # Εδώ λέμε στο logging να χρησιμοποιήσει την κλάση μας!
                 "()": "atsig_common.logger.config.ColorFormatter",
             },
             "access": {

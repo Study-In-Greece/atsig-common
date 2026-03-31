@@ -8,6 +8,18 @@ from .schemas import PaginationParams, PaginatedResponse
 def build_paginated_response(
     pagination: PaginationParams, total: int, items: list
 ) -> PaginatedResponse:
+    """
+    Constructs a PaginatedResponse object with metadata.
+
+    Args:
+        pagination (PaginationParams): The pagination settings (page, limit, offset).
+        total (int): The total count of records in the database.
+        items (list): The list of items for the current page.
+
+    Returns:
+        PaginatedResponse: A standardized response object containing data and metadata.
+    """
+    # Calculate total pages, ensuring at least 0 if no records exist
     total_pages = (total + pagination.limit - 1) // pagination.limit if total > 0 else 0
     return PaginatedResponse(
         total=total,
@@ -29,9 +41,18 @@ async def paginate_raw(
     default_sort: str = "id",
     default_order: str = "asc",
 ):
-    """Returns data and total count with dynamic sorting and reliable fallbacks."""
+    """
+    Executes a paginated query with dynamic sorting and reliable fallbacks.
 
-    # 1. Get Total Count
+    This function handles the database-level operations: counting total records,
+    applying dynamic sorting based on provided attributes, and fetching the
+    requested slice of data.
+
+    Returns:
+        tuple: A tuple containing (results, total_count).
+    """
+
+    # 1. Get Total Count using a subquery to handle complex joins/filters correctly
     total = (
         await session.scalar(select(func.count()).select_from(query.subquery())) or 0
     )
@@ -41,26 +62,27 @@ async def paginate_raw(
     order_type = pagination.order or default_order
     effective_sort_model = sort_model or model
 
-    # Προσπάθεια εύρεσης της στήλης
+    # Attempt to find the sorting column in the specified model
     sort_column = getattr(effective_sort_model, sort_attr, None)
 
-    # Fallback στο βασικό μοντέλο αν δώσαμε sort_model αλλά δεν βρέθηκε εκεί η στήλη
+    # Fallback to the primary model if a sort_model was provided but the attribute was missing
     if sort_column is None and sort_model is not None:
         sort_column = getattr(model, sort_attr, None)
 
-    # Αν ακόμα δεν βρέθηκε (π.χ. λάθος string στο sort), ψάχνουμε id ή created_at
+    # If the attribute is still not found (e.g., invalid string), fallback to 'id' or 'created_at'
     if sort_column is None:
-        sort_attr = "id"  # Reset το attribute name για το deterministic check παρακάτω
+        sort_attr = "id"  # Reset attribute name for the deterministic check below
         sort_column = getattr(model, "id", None) or getattr(model, "created_at", None)
 
-    # 3. Εφαρμογή Sorting
+    # 3. Apply Sorting
     order_func = asc if order_type == "asc" else desc
 
     if sort_column is not None:
         query = query.order_by(order_func(sort_column))
 
-        # Προσθήκη δευτερεύοντος sorting (Deterministic)
-        # Μόνο αν δεν ταξινομούμε ήδη βάσει id/created_at
+        # Apply Secondary Sorting (Deterministic Result Set)
+        # We add a secondary sort key if the primary key is not already 'id' or 'created_at'.
+        # This prevents inconsistent ordering when the primary sort column has duplicate values.
         if sort_attr not in ["id", "created_at"]:
             secondary_col = getattr(model, "id", None) or getattr(
                 model, "created_at", None
@@ -68,7 +90,7 @@ async def paginate_raw(
             if secondary_col is not None:
                 query = query.order_by(desc(secondary_col))
     else:
-        # Αν όλα αποτύχουν, μην κρασάρεις, απλώς μην κάνεις sort ή βάλε ένα default
+        # If all sorting attempts fail, proceed without specific ordering
         pass
 
     # 4. Apply Limit/Offset
@@ -87,6 +109,21 @@ async def paginate_query(
     default_sort: str = "id",
     default_order: str = "asc",
 ):
+    """
+    Higher-level utility that paginates a query and returns a formatted response.
+
+    Args:
+        query: The SQLAlchemy query object.
+        model: The primary SQLAlchemy model class.
+        session (AsyncSession): The database session.
+        pagination (PaginationParams): The requested pagination parameters.
+        sort_model (Optional[Type[Any]]): Alternative model for sorting (useful for joins).
+        default_sort (str): Default column to sort by.
+        default_order (str): Default sort direction ("asc" or "desc").
+
+    Returns:
+        PaginatedResponse: The final response object ready to be returned by an API.
+    """
     results, total = await paginate_raw(
         query, model, session, pagination, sort_model, default_sort, default_order
     )

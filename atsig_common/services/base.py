@@ -15,29 +15,64 @@ PolicyType = TypeVar("PolicyType", bound=BaseAccessPolicy)
 
 
 class BaseService:
-    """The ultimate base: DB, no Auth"""
+    """
+    The fundamental base service.
+
+    Provides direct access to the database session without any
+    authentication or authorization logic.
+    """
 
     def __init__(self, session: AsyncSession):
+        """
+        Initializes the service with a database session.
+
+        Args:
+            session (AsyncSession): The SQLAlchemy async session.
+        """
         self.session = session
 
 
 class CRUDBaseService(
     BaseService, Generic[ModelType, CreateSchemaType, UpdateSchemaType]
 ):
-    """The pure Database CRUD engine"""
+    """
+    A generic Database CRUD engine.
+
+    Provides standard Create, Read, Update, and Delete operations for a
+    given SQLAlchemy model, using Pydantic schemas for data validation.
+    """
 
     def __init__(self, model: Type[ModelType], session: AsyncSession):
+        """
+        Initializes the CRUD service for a specific model.
+
+        Args:
+            model (Type[ModelType]): The SQLAlchemy model class.
+            session (AsyncSession): The database session.
+        """
         super().__init__(session)
         self.model = model
 
-    async def _get_or_404(self, resource_id: Any) -> ModelType:
-        """Helper for fetch with 404, without auth check"""
+    async def get_or_404(self, resource_id: Any) -> ModelType:
+        """
+        Retrieves a record or raises a 404 exception.
+
+        Args:
+            resource_id (Any): The primary key of the resource.
+
+        Returns:
+            ModelType: The retrieved database object.
+
+        Raises:
+            NotFoundError: If the object does not exist in the database.
+        """
         obj = await self.session.get(self.model, resource_id)
         if not obj:
             raise NotFoundError(f"{self.model.__name__} not found")
         return obj
 
     async def get(self, resource_id: Any) -> Optional[ModelType]:
+        """Fetches a single record by its primary key."""
         return await self.session.get(self.model, resource_id)
 
     async def get_multi(
@@ -47,6 +82,17 @@ class CRUDBaseService(
         pagination: PaginationParams,
         sort_model: Type[ModelType] = None,
     ) -> PaginatedResponse:
+        """
+        Fetches multiple records with pagination and optional sorting.
+
+        Args:
+            query: An optional SQLAlchemy query. Defaults to 'select(model)'.
+            pagination (PaginationParams): Pagination and sorting parameters.
+            sort_model (Type[ModelType]): Alternative model for sorting.
+
+        Returns:
+            PaginatedResponse: Standardized paginated data.
+        """
         if query is None:
             query = select(self.model)
         return await paginate_query(
@@ -61,7 +107,15 @@ class CRUDBaseService(
         **extra_data: Any,
     ) -> ModelType:
         """
-        Creates a new record, allowing exclusion of non-model fields.
+        Creates a new database record.
+
+        Args:
+            obj_in: Pydantic schema or dict containing the data.
+            exclude (set[str]): Fields to exclude from the input data.
+            **extra_data: Additional fields to be merged into the object (e.g., owner_id).
+
+        Returns:
+            ModelType: The created database object.
         """
         if isinstance(obj_in, dict):
             data = obj_in
@@ -85,7 +139,15 @@ class CRUDBaseService(
         exclude: Optional[set[str]] = None,
     ) -> ModelType:
         """
-        Updates a record, allowing exclusion of non-model fields.
+        Updates an existing database record.
+
+        Args:
+            db_obj (ModelType): The current database object.
+            obj_in: Pydantic schema or dict with updated values.
+            exclude (set[str]): Fields to exclude from the update.
+
+        Returns:
+            ModelType: The updated and refreshed database object.
         """
         if isinstance(obj_in, dict):
             update_data = obj_in
@@ -109,31 +171,52 @@ class CRUDBaseService(
         obj_in: Union[UpdateSchemaType, Dict[str, Any]],
         exclude: Optional[set[str]] = None,
     ) -> ModelType:
-        """Fetch and Update in one call (ideal for Uni API)"""
-        db_obj = await self._get_or_404(resource_id)
+        """
+        Combines fetch and update in a single operation.
+
+        Ideal for simpler API calls where the object is updated via ID.
+        """
+        db_obj = await self.get_or_404(resource_id)
         return await self.update(db_obj=db_obj, obj_in=obj_in, exclude=exclude)
 
     async def remove(self, *, resource_id: Any) -> None:
-        db_obj = await self._get_or_404(resource_id)
+        """
+        Deletes a record from the database.
+
+        Args:
+            resource_id (Any): The primary key of the resource to remove.
+        """
+        db_obj = await self.get_or_404(resource_id)
         await self.session.delete(db_obj)
 
     async def get_all(self) -> List[ModelType]:
-        """Fetch all objects without pagination."""
+        """Fetches all objects of the model without pagination."""
         query = select(self.model)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def get_by_ids(self, resource_ids: List[Any]) -> List[ModelType]:
-        """Fetch multiple objects based on a list of IDs."""
+        """Fetches multiple objects filtering by a list of IDs."""
         query = select(self.model).where(self.model.id.in_(resource_ids))
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
 
 class BaseAuthService(BaseService, Generic[PolicyType]):
-    """Requires Strict Auth Policy"""
+    """
+    Base service that integrates with an Authorization Policy.
+
+    This service requires a Policy instance to handle permission checks.
+    """
 
     def __init__(self, session: AsyncSession, policy: Optional[PolicyType] = None):
+        """
+        Initializes the service with DB session and Auth Policy.
+
+        Args:
+            session (AsyncSession): The database session.
+            policy (PolicyType): The access policy containing the user context.
+        """
         super().__init__(session)
         self.policy: PolicyType = policy
         self.ctx = policy.ctx if policy else None
@@ -143,7 +226,12 @@ class CRUDBaseAuthService(
     CRUDBaseService[ModelType, CreateSchemaType, UpdateSchemaType],
     Generic[ModelType, CreateSchemaType, UpdateSchemaType, PolicyType],
 ):
-    """CRUD + Auth Policy"""
+    """
+    A service that combines CRUD capabilities with Authorization Policies.
+
+    Used when operations need to verify if a user has the right to access
+    or modify specific database records.
+    """
 
     def __init__(
         self,
@@ -158,7 +246,21 @@ class CRUDBaseAuthService(
     async def get_authorized(
         self, resource_id: Any, check_callback: Callable[[ModelType, PolicyType], None]
     ) -> ModelType:
-        db_obj = await self._get_or_404(resource_id)
+        """
+        Fetches a resource and performs an authorization check.
+
+        Args:
+            resource_id (Any): The primary key.
+            check_callback: A function that takes the object and the policy
+                to determine if access is granted.
+
+        Returns:
+            ModelType: The authorized database object.
+
+        Raises:
+            ForbiddenError: If the check_callback returns False.
+        """
+        db_obj = await self.get_or_404(resource_id)
 
         if self.policy:
             if not check_callback(db_obj, self.policy):
