@@ -1,5 +1,8 @@
 import aioboto3
 from typing import Optional
+
+from botocore.config import Config
+
 from .base import BaseStorage, BucketType
 
 
@@ -41,11 +44,17 @@ class S3Storage(BaseStorage):
         Initializes the asynchronous S3 client.
         Should be called within the FastAPI lifespan startup.
         """
+        s3_config = Config(
+            signature_version="s3v4", retries={"max_attempts": 3, "mode": "standard"}
+        )
+
         self._s3_client = await self.session.client(
             "s3",
             endpoint_url=self.r2_endpoint_url,
             aws_access_key_id=self.r2_access_key_id,
             aws_secret_access_key=self.r2_secret_access_key,
+            config=s3_config,
+            region_name="auto",
         ).__aenter__()
 
     async def stop(self):
