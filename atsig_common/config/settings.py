@@ -38,6 +38,13 @@ class BaseAtsigSettings(BaseSettings):
     MAIL_SERVER: Optional[str] = None
     MAIL_STARTTLS: bool = True
 
+    # --- 6. STORAGE (Cloudflare R2 / S3) ---
+    R2_ENDPOINT_URL: str
+    R2_ACCESS_KEY_ID: str
+    R2_SECRET_ACCESS_KEY: str
+    R2_PRIVATE_BUCKET: Optional[str] = None
+    R2_PUBLIC_BUCKET: Optional[str] = None
+
     # --- COMPUTED PROPERTIES ---
     @property
     def keycloak_base(self) -> str:
