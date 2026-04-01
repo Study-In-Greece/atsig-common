@@ -44,6 +44,7 @@ class BaseAtsigSettings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str
     R2_PRIVATE_BUCKET: Optional[str] = None
     R2_PUBLIC_BUCKET: Optional[str] = None
+    R2_PUBLIC_DOMAIN: Optional[str] = None
 
     # --- COMPUTED PROPERTIES ---
     @property
