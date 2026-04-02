@@ -136,3 +136,6 @@ class S3Storage(BaseStorage):
         self._ensure_client()
         bucket = self._get_bucket_name(bucket_type)
         await self._s3_client.delete_object(Bucket=bucket, Key=key)
+
+    def __getattr__(self, name):
+        return getattr(self._s3_client, name)
