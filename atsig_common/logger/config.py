@@ -101,3 +101,16 @@ def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]
             service_name: {"handlers": ["default"], "level": level, "propagate": False},
         },
     }
+
+
+def get_logger(name: str) -> logging.Logger:
+    """
+    Utility function to retrieve a standard logger instance.
+
+    Args:
+        name (str): The name of the logger, typically __name__.
+
+    Returns:
+        logging.Logger: The requested logger instance.
+    """
+    return logging.getLogger(name)
