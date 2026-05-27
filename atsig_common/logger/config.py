@@ -66,21 +66,17 @@ def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]
         "formatters": {
             "standard": {
                 "()": "atsig_common.logger.config.UnifiedFormatter",
-            },
-            # "access": {
-            #     "()": "uvicorn.logging.AccessFormatter",
-            #     "fmt": '%(asctime)s | %(levelname)-8s | %(client_addr)s - "%(request_line)s" %(status_code)s',
-            #     "datefmt": "%Y-%m-%d %H:%M:%S",
-            # },
+            }
+            # Διαγράψαμε τον 'access' formatter εντελώς!
         },
         "handlers": {
             "default": {
                 "formatter": "standard",
                 "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",  # Send all app logs to stdout for Docker
+                "stream": "ext://sys.stdout",
             },
             "access": {
-                "formatter": "access",
+                "formatter": "standard",  # <-- Τώρα χρησιμοποιεί και αυτός τον δικό μας!
                 "class": "logging.StreamHandler",
                 "stream": "ext://sys.stdout",
             },
