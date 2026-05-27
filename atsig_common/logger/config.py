@@ -67,19 +67,14 @@ def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]
             "standard": {
                 "()": "atsig_common.logger.config.UnifiedFormatter",
             }
-            # Διαγράψαμε τον 'access' formatter εντελώς!
         },
         "handlers": {
             "default": {
                 "formatter": "standard",
                 "class": "logging.StreamHandler",
                 "stream": "ext://sys.stdout",
-            },
-            "access": {
-                "formatter": "standard",  # <-- Τώρα χρησιμοποιεί και αυτός τον δικό μας!
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stdout",
-            },
+            }
+            # Αφαιρέσαμε τον 'access' handler, δεν τον χρειαζόμαστε πια
         },
         "loggers": {
             "": {"handlers": ["default"], "level": level},
@@ -89,9 +84,11 @@ def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]
                 "handlers": ["default"],
                 "propagate": False,
             },
+            # Κάνουμε "mute" τα default access logs του uvicorn αφαιρώντας τους handlers.
+            # Θα τα γράφουμε εμείς μέσα από το middleware!
             "uvicorn.access": {
-                "handlers": ["access"],
-                "level": level,
+                "handlers": [],
+                "level": "WARNING", # Ανεβάζουμε το level για να μην κάνει καν trigger τα INFO
                 "propagate": False,
             },
             service_name: {"handlers": ["default"], "level": level, "propagate": False},

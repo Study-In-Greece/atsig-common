@@ -1,3 +1,4 @@
+import time
 import uuid
 import jwt
 import logging
@@ -13,8 +14,14 @@ logger = logging.getLogger(__name__)
 class LoggingContextMiddleware(BaseHTTPMiddleware):
     """
     Middleware that populates logging context variables for each HTTP request.
-    It extracts or generates a Request ID, extracts User ID and Email from the JWT,
-    and synchronizes this data with both standard logs and Sentry/GlitchTip.
+
+    Responsibilities:
+    1. Extracts or generates a unique Request ID.
+    2. Extracts User ID and Email from the JWT (if present).
+    3. Synchronizes this data with both standard logs and Sentry/GlitchTip.
+    4. Records custom, context-aware access logs with execution time.
+    5. Catches and logs unhandled exceptions before context cleanup to ensure
+       error logs contain the correct Request ID and User Email.
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -56,15 +63,35 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
         token_email = user_email_var.set(user_email)
 
         try:
-            # 3. Process the actual endpoint logic
+            # 3. Process the actual endpoint logic and measure execution time
+            start_time = time.time()
             response = await call_next(request)
+            process_time = time.time() - start_time
+
+            # 4. Write our custom, context-aware access log
+            client_ip = request.client.host if request.client else "unknown"
+            logger.info(
+                f'{client_ip} - "{request.method} {request.url.path}" '
+                f"{response.status_code} ({process_time:.3f}s)"
+            )
 
             # Inject Request ID into response headers for client/frontend debugging
             response.headers["X-Request-ID"] = request_id
             return response
 
+        except Exception:
+            # 5. Catch unhandled exceptions to log them WITH context before the finally block clears it.
+            # We use logger.exception to automatically include the full stack trace.
+            logger.exception(
+                f"Unhandled exception during {request.method} {request.url.path}"
+            )
+
+            # Re-raise the exception so FastAPI can return a 500 response
+            # and Sentry/GlitchTip can capture the event.
+            raise
+
         finally:
-            # 4. Cleanup context to prevent memory leaks across async workers
+            # 6. Cleanup context to prevent memory leaks and data mixing across async workers
             request_id_var.reset(token_rid)
             user_id_var.reset(token_uid)
             user_email_var.reset(token_email)
