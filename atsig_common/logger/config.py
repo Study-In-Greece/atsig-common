@@ -1,36 +1,14 @@
+import json
 import logging
-import os
 from typing import Any, Dict
 from atsig_common.logger.context import request_id_var, user_id_var, user_email_var
 
 
 class UnifiedFormatter(logging.Formatter):
     """
-    Custom logging formatter that dynamically injects Request ID, User ID, and User Email.
-    Automatically disables ANSI colors if running in a production environment.
+    Custom logging formatter that outputs logs as structured JSON strings.
+    Optimized for modern log aggregators like Grafana Loki or ELK.
     """
-
-    # ANSI Color Codes
-    CYAN = "\x1b[36;20m"
-    YELLOW = "\x1b[33;20m"
-    RED = "\x1b[31;20m"
-    BOLD_RED = "\x1b[31;1m"
-    RESET = "\x1b[0m"
-
-    FORMATS = {
-        logging.DEBUG: RESET,
-        logging.INFO: CYAN,
-        logging.WARNING: YELLOW,
-        logging.ERROR: RED,
-        logging.CRITICAL: BOLD_RED,
-    }
-
-    def __init__(self, fmt: str = None, datefmt: str = None):
-        super().__init__(fmt, datefmt)
-        # Disable colors if ENVIRONMENT env var is set to 'production'
-        self.use_colors = (
-            os.getenv("ENVIRONMENT", "development").lower() != "production"
-        )
 
     def format(self, record: logging.LogRecord) -> str:
         # 1. Fetch metadata from ContextVars
@@ -38,21 +16,23 @@ class UnifiedFormatter(logging.Formatter):
         usr_id = user_id_var.get() or "anonymous"
         usr_email = user_email_var.get() or "no-email"
 
-        # 2. Attach them to the record so they can be formatted
-        record.request_id = req_id
-        record.user_id = usr_id
-        record.user_email = usr_email
+        # 2. Build the structured log dictionary
+        log_record = {
+            "timestamp": self.formatTime(record, "%Y-%m-%d %H:%M:%S"),
+            "level": record.levelname,
+            "request_id": req_id,
+            "user_id": usr_id,
+            "user_email": usr_email,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
 
-        # 3. Apply color if applicable
-        if self.use_colors:
-            color = self.FORMATS.get(record.levelno, self.RESET)
-            log_fmt = f"{color}%(asctime)s | %(levelname)-8s | req:%(request_id)s | email:%(user_email)s | %(name)s | %(message)s{self.RESET}"
-        else:
-            log_fmt = "%(asctime)s | %(levelname)-8s | req:%(request_id)s | email:%(user_email)s | %(name)s | %(message)s"
+        # 3. If there is an exception stack trace, inject it into the JSON
+        if record.exc_info:
+            log_record["exception"] = self.formatException(record.exc_info)
 
-        # Override formatter configuration dynamically
-        formatter = logging.Formatter(log_fmt, datefmt="%Y-%m-%d %H:%M:%S")
-        return formatter.format(record)
+        # 4. Convert to a compact JSON string (ensure_ascii=False preserves Greek characters)
+        return json.dumps(log_record, ensure_ascii=False)
 
 
 def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]:
@@ -74,7 +54,6 @@ def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]
                 "class": "logging.StreamHandler",
                 "stream": "ext://sys.stdout",
             }
-            # Αφαιρέσαμε τον 'access' handler, δεν τον χρειαζόμαστε πια
         },
         "loggers": {
             "": {"handlers": ["default"], "level": level},
@@ -84,11 +63,9 @@ def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]
                 "handlers": ["default"],
                 "propagate": False,
             },
-            # Κάνουμε "mute" τα default access logs του uvicorn αφαιρώντας τους handlers.
-            # Θα τα γράφουμε εμείς μέσα από το middleware!
             "uvicorn.access": {
                 "handlers": [],
-                "level": "WARNING", # Ανεβάζουμε το level για να μην κάνει καν trigger τα INFO
+                "level": "WARNING",
                 "propagate": False,
             },
             service_name: {"handlers": ["default"], "level": level, "propagate": False},
