@@ -1,97 +1,83 @@
 import logging
+import os
 from typing import Any, Dict
+from atsig_common.logger.context import request_id_var, user_id_var, user_email_var
 
 
-class ColorFormatter(logging.Formatter):
+class UnifiedFormatter(logging.Formatter):
     """
-    Custom logging formatter that adds ANSI color codes to terminal output.
-
-    This formatter maps different logging levels to specific colors to improve
-    readability in development environments.
+    Custom logging formatter that dynamically injects Request ID, User ID, and User Email.
+    Automatically disables ANSI colors if running in a production environment.
     """
 
-    # ANSI Color Escape Codes
-    GREY = "\x1b[38;20m"
-    BLUE = "\x1b[34;20m"
+    # ANSI Color Codes
     CYAN = "\x1b[36;20m"
     YELLOW = "\x1b[33;20m"
     RED = "\x1b[31;20m"
     BOLD_RED = "\x1b[31;1m"
     RESET = "\x1b[0m"
 
-    # Base format string shared across all levels
-    base_fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
-
-    # Mapping of logging levels to colored format strings
     FORMATS = {
-        logging.DEBUG: GREY + base_fmt + RESET,
-        logging.INFO: CYAN + base_fmt + RESET,
-        logging.WARNING: YELLOW + base_fmt + RESET,
-        logging.ERROR: RED + base_fmt + RESET,
-        logging.CRITICAL: BOLD_RED + base_fmt + RESET,
+        logging.DEBUG: RESET,
+        logging.INFO: CYAN,
+        logging.WARNING: YELLOW,
+        logging.ERROR: RED,
+        logging.CRITICAL: BOLD_RED,
     }
 
-    def format(self, record):
-        """
-        Formats the log record with the appropriate color based on its level.
+    def __init__(self, fmt: str = None, datefmt: str = None):
+        super().__init__(fmt, datefmt)
+        # Disable colors if ENVIRONMENT env var is set to 'production'
+        self.use_colors = (
+            os.getenv("ENVIRONMENT", "development").lower() != "production"
+        )
 
-        Args:
-            record (logging.LogRecord): The log record to be formatted.
+    def format(self, record: logging.LogRecord) -> str:
+        # 1. Fetch metadata from ContextVars
+        req_id = request_id_var.get()
+        usr_id = user_id_var.get() or "anonymous"
+        usr_email = user_email_var.get() or "no-email"
 
-        Returns:
-            str: The formatted and colorized log string.
-        """
-        log_fmt = self.FORMATS.get(record.levelno, self.base_fmt)
+        # 2. Attach them to the record so they can be formatted
+        record.request_id = req_id
+        record.user_id = usr_id
+        record.user_email = usr_email
+
+        # 3. Apply color if applicable
+        if self.use_colors:
+            color = self.FORMATS.get(record.levelno, self.RESET)
+            log_fmt = f"{color}%(asctime)s | %(levelname)-8s | req:%(request_id)s | email:%(user_email)s | %(name)s | %(message)s{self.RESET}"
+        else:
+            log_fmt = "%(asctime)s | %(levelname)-8s | req:%(request_id)s | email:%(user_email)s | %(name)s | %(message)s"
+
+        # Override formatter configuration dynamically
         formatter = logging.Formatter(log_fmt, datefmt="%Y-%m-%d %H:%M:%S")
         return formatter.format(record)
 
 
-def get_logger(name: str):
-    """
-    Utility function to retrieve a standard logger instance.
-
-    Args:
-        name (str): The name of the logger, typically __name__.
-
-    Returns:
-        logging.Logger: The requested logger instance.
-    """
-    return logging.getLogger(name)
-
-
 def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]:
     """
-    Generates a comprehensive logging configuration dictionary.
-
-    This configuration is compatible with logging.config.dictConfig and is
-    specifically tailored for FastAPI/Uvicorn applications. It includes
-    separate handlers for general logs (pretty-printed) and access logs.
-
-    Args:
-        service_name (str): The name of the specific service logger to configure.
-        level (str): The global logging level (e.g., "DEBUG", "INFO"). Defaults to "INFO".
-
-    Returns:
-        Dict[str, Any]: A dictionary containing the full logging setup.
+    Generates the comprehensive logging configuration dictionary.
+    Safe for Uvicorn/FastAPI applications.
     """
     return {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
-            "pretty": {
-                "()": "atsig_common.logger.config.ColorFormatter",
+            "standard": {
+                "()": "atsig_common.logger.config.UnifiedFormatter",
             },
             "access": {
                 "()": "uvicorn.logging.AccessFormatter",
-                "fmt": '%(asctime)s | %(levelname)-8s | %(name)s | %(client_addr)s - "%(request_line)s" %(status_code)s',
+                "fmt": '%(asctime)s | %(levelname)-8s | %(client_addr)s - "%(request_line)s" %(status_code)s',
                 "datefmt": "%Y-%m-%d %H:%M:%S",
             },
         },
         "handlers": {
             "default": {
-                "formatter": "pretty",
+                "formatter": "standard",
                 "class": "logging.StreamHandler",
-                "stream": "ext://sys.stderr",
+                "stream": "ext://sys.stdout",  # Send all app logs to stdout for Docker
             },
             "access": {
                 "formatter": "access",
