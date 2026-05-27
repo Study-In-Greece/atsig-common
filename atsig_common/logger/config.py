@@ -67,11 +67,11 @@ def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]
             "standard": {
                 "()": "atsig_common.logger.config.UnifiedFormatter",
             },
-            "access": {
-                "()": "uvicorn.logging.AccessFormatter",
-                "fmt": '%(asctime)s | %(levelname)-8s | %(client_addr)s - "%(request_line)s" %(status_code)s',
-                "datefmt": "%Y-%m-%d %H:%M:%S",
-            },
+            # "access": {
+            #     "()": "uvicorn.logging.AccessFormatter",
+            #     "fmt": '%(asctime)s | %(levelname)-8s | %(client_addr)s - "%(request_line)s" %(status_code)s',
+            #     "datefmt": "%Y-%m-%d %H:%M:%S",
+            # },
         },
         "handlers": {
             "default": {
