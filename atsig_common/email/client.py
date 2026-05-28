@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal, Optional
 from celery import Celery
 from ..logger.config import get_logger
 
@@ -9,7 +10,10 @@ logger = get_logger("atsig_common.email.client")
 @dataclass(frozen=True)
 class EmailServiceConfig:
     # These must MATCH EXACTLY with the Email Service (Worker) settings
-    TASK_SEND_TEMPLATE: str = "email.send_single_template"
+    # 🔹 Χωρίσαμε τα tasks σε High και Low!
+    TASK_SEND_HIGH: str = "email.send_high"
+    TASK_SEND_LOW: str = "email.send_low"
+
     QUEUE_HIGH: str = "high_priority"
     QUEUE_LOW: str = "low_priority"
 
@@ -30,9 +34,9 @@ class AsyncEmailClient:
         self,
         template_name: str,
         context: dict,
-        user_id: str = None,
-        recipient_email: str = None,
-        priority: str = "high",
+        user_id: Optional[str] = None,
+        recipient_email: Optional[str] = None,
+        priority: Literal["high", "low"] = "high",  # 🔹 ΤΕΛΕΙΟ TYPE SAFETY
     ) -> str:
         """
         Puts the email into the appropriate queue (high or low priority).
@@ -43,13 +47,18 @@ class AsyncEmailClient:
                 "At least one must be provided: user_id or recipient_email."
             )
 
-        # Select the correct queue based on priority
-        queue = self.config.QUEUE_HIGH if priority == "high" else self.config.QUEUE_LOW
+        # 🔹 Select the correct Task AND Queue based on priority
+        if priority == "high":
+            task_name = self.config.TASK_SEND_HIGH
+            queue = self.config.QUEUE_HIGH
+        else:
+            task_name = self.config.TASK_SEND_LOW
+            queue = self.config.QUEUE_LOW
 
         try:
             # Send the Task
             task = self.celery_app.send_task(
-                name=self.config.TASK_SEND_TEMPLATE,
+                name=task_name,
                 kwargs={
                     "template_name": template_name,
                     "context": context,
