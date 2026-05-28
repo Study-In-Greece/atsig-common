@@ -25,20 +25,12 @@ class BaseAtsigSettings(BaseSettings):
     AUTHORIZATION_URL: str
     KEYCLOAK_VERIFY_SSL: bool = True
 
-    # --- 4. REDIS (Προαιρετικό για το shared base) ---
+    # --- 4. REDIS (Optional for shared base) ---
     REDIS_SERVER: Optional[str] = None
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: Optional[str] = None
 
-    # --- 5. MAIL (Προαιρετικό) ---
-    MAIL_USERNAME: Optional[str] = None
-    MAIL_PASSWORD: Optional[str] = None
-    MAIL_FROM: Optional[str] = None
-    MAIL_PORT: Optional[int] = 587
-    MAIL_SERVER: Optional[str] = None
-    MAIL_STARTTLS: bool = True
-
-    # --- 6. STORAGE (Cloudflare R2 / S3) ---
+    # --- 5. STORAGE (Cloudflare R2 / S3) ---
     R2_ENDPOINT_URL: str
     R2_ACCESS_KEY_ID: str
     R2_SECRET_ACCESS_KEY: str
