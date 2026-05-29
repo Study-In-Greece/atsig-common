@@ -10,7 +10,6 @@ logger = get_logger("atsig_common.email.client")
 @dataclass(frozen=True)
 class EmailServiceConfig:
     # These must MATCH EXACTLY with the Email Service (Worker) settings
-    # 🔹 Χωρίσαμε τα tasks σε High και Low!
     TASK_SEND_HIGH: str = "email.send_high"
     TASK_SEND_LOW: str = "email.send_low"
 

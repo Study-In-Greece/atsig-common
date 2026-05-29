@@ -50,6 +50,12 @@ class BaseAtsigSettings(BaseSettings):
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
+    @property
+    def redis_url(self) -> str:
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_SERVER}:{self.REDIS_PORT}/0"
+        return f"redis://{self.REDIS_SERVER}:{self.REDIS_PORT}/0"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",
