@@ -12,6 +12,7 @@ class EmailServiceConfig:
     # These must MATCH EXACTLY with the Email Service (Worker) settings
     TASK_SEND_HIGH: str = "email.send_high"
     TASK_SEND_LOW: str = "email.send_low"
+    TASK_SEND_BULK: str = "email.send_bulk"
 
     QUEUE_HIGH: str = "high_priority"
     QUEUE_LOW: str = "low_priority"
@@ -75,4 +76,44 @@ class AsyncEmailClient:
 
         except Exception as e:
             logger.error(f"[EmailClient] Failed to send task to Celery: {e}")
+            raise e
+
+    def send_bulk_emails(
+        self,
+        template_name: str,
+        context: dict,
+        user_ids: Optional[list[str]] = None,
+        recipients: Optional[list[str]] = None,
+    ) -> str:
+        """
+        Sends a single task to Celery containing multiple recipients.
+        The worker will split this into individual low-priority emails using a group.
+        """
+        if not user_ids and not recipients:
+            raise ValueError("Must provide at least one list: user_ids or recipients.")
+
+        payload = {
+            "template_name": template_name,
+            "context": context,
+            "user_ids": user_ids or [],
+            "recipients": recipients or [],
+        }
+
+        try:
+            # 🔹 Τα bulk tasks πηγαίνουν ΠΑΝΤΑ στη low_priority queue
+            # για να μην μπλοκάρουν ποτέ τα password resets / registrations
+            task = self.celery_app.send_task(
+                name=self.config.TASK_SEND_BULK,
+                kwargs=payload,
+                queue=self.config.QUEUE_LOW,
+            )
+
+            logger.info(
+                f"[EmailClient] Queued BULK task '{template_name}' "
+                f"(Task ID: {task.id}) for {len(payload['user_ids']) + len(payload['recipients'])} recipients."
+            )
+            return task.id
+
+        except Exception as e:
+            logger.error(f"[EmailClient] Failed to queue bulk email task: {e}")
             raise e
