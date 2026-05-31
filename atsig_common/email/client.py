@@ -36,7 +36,7 @@ class AsyncEmailClient:
         context: dict,
         user_id: Optional[str] = None,
         recipient_email: Optional[str] = None,
-        priority: Literal["high", "low"] = "high",  # 🔹 ΤΕΛΕΙΟ TYPE SAFETY
+        priority: Literal["high", "low"] = "high",
     ) -> str:
         """
         Puts the email into the appropriate queue (high or low priority).
@@ -47,7 +47,7 @@ class AsyncEmailClient:
                 "At least one must be provided: user_id or recipient_email."
             )
 
-        # 🔹 Select the correct Task AND Queue based on priority
+        # Select the correct Task AND Queue based on priority
         if priority == "high":
             task_name = self.config.TASK_SEND_HIGH
             queue = self.config.QUEUE_HIGH
