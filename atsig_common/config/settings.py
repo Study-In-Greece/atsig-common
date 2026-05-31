@@ -1,4 +1,6 @@
 from typing import Optional
+from urllib.parse import quote
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -53,7 +55,8 @@ class BaseAtsigSettings(BaseSettings):
     @property
     def redis_url(self) -> str:
         if self.REDIS_PASSWORD:
-            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_SERVER}:{self.REDIS_PORT}/0"
+            safe_password = quote(self.REDIS_PASSWORD)
+            return f"redis://:{safe_password}@{self.REDIS_SERVER}:{self.REDIS_PORT}/0"
         return f"redis://{self.REDIS_SERVER}:{self.REDIS_PORT}/0"
 
     model_config = SettingsConfigDict(
