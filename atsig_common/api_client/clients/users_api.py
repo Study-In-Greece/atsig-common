@@ -53,5 +53,9 @@ class UsersAPI(BaseAPI):
     async def get_applicant_profile(self, applicant_id: str):
         return await self.get(endpoint=f"/applicants/{applicant_id}/complete")
 
-    async def get_applicant_file_url(self, file_key: str):
-        return await self.get(endpoint=f"{file_key}/url")
+    async def get_applicant_media_url(self, applicant_id: str, key: str):
+        return await self.get(
+            endpoint=f"/applicants/{applicant_id}/media-url",
+            params={"key": key}
+        )
+
