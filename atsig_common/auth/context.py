@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,7 +126,7 @@ class BaseAuthContext:
     agent: AgentContext | None = None
     evaluator: EvaluatorContext | None = None
 
-    async def load_role_contexts(self, session: AsyncSession) -> "AuthContext":
+    async def load_role_contexts(self, session: AsyncSession) -> Self:
         """
         Loads all applicable role contexts for the user based on their group memberships.
 

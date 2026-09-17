@@ -1,6 +1,6 @@
-from typing import TypeVar, Generic
-from .context import BaseAuthContext
+from typing import Generic, TypeVar
 
+from .context import BaseAuthContext
 
 # A TypeVar restricted to subclasses of BaseAuthContext.
 # This ensures that any context passed to an Access Policy

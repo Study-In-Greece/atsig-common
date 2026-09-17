@@ -31,4 +31,4 @@ def decode_token(keycloak_client: KeycloakOpenID, token: str) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None

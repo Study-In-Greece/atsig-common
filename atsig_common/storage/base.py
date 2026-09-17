@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Literal, Optional
+from typing import Literal
 
 # Define allowed bucket types for strict type checking
 BucketType = Literal["private", "public"]
@@ -17,7 +17,7 @@ class BaseStorage(ABC):
         file_data: bytes,
         key: str,
         bucket_type: BucketType = "private",
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> str:
         """Uploads a file to the storage provider."""
         pass

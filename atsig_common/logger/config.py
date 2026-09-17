@@ -1,7 +1,8 @@
 import json
 import logging
-from typing import Any, Dict
-from atsig_common.logger.context import request_id_var, user_id_var, user_email_var
+from typing import Any
+
+from atsig_common.logger.context import request_id_var, user_email_var, user_id_var
 
 
 class UnifiedFormatter(logging.Formatter):
@@ -35,7 +36,7 @@ class UnifiedFormatter(logging.Formatter):
         return json.dumps(log_record, ensure_ascii=False)
 
 
-def get_logging_config(service_name: str, level: str = "INFO") -> Dict[str, Any]:
+def get_logging_config(service_name: str, level: str = "INFO") -> dict[str, Any]:
     """
     Generates the comprehensive logging configuration dictionary.
     Safe for Uvicorn/FastAPI applications.

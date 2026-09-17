@@ -1,8 +1,9 @@
-from typing import Optional, Type, Any
+from typing import Any
 
-from sqlalchemy import select, func, asc, desc
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from .schemas import PaginationParams, PaginatedResponse
+
+from .schemas import PaginatedResponse, PaginationParams
 
 
 def build_paginated_response(
@@ -34,10 +35,10 @@ def build_paginated_response(
 
 async def paginate_raw(
     query: Any,
-    model: Type[Any],
+    model: type[Any],
     session: AsyncSession,
     pagination: PaginationParams,
-    sort_model: Optional[Type[Any]] = None,
+    sort_model: type[Any] | None = None,
     default_sort: str = "id",
     default_order: str = "asc",
 ):
@@ -105,7 +106,7 @@ async def paginate_query(
     model,
     session: AsyncSession,
     pagination: PaginationParams,
-    sort_model: Optional[Type[Any]] = None,
+    sort_model: type[Any] | None = None,
     default_sort: str = "id",
     default_order: str = "asc",
 ):

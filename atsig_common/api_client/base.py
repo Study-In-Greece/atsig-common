@@ -1,14 +1,14 @@
 import httpx
 
-from .http_manager import HttpClientManager
 from ..exceptions import (
     AtsigError,
-    UnauthorizedError,
+    BadRequestError,
+    ConflictError,
     ForbiddenError,
     NotFoundError,
-    ConflictError,
-    BadRequestError,
+    UnauthorizedError,
 )
+from .http_manager import HttpClientManager
 
 
 class BaseAPI:
@@ -119,7 +119,7 @@ class BaseAPI:
 
         except httpx.RequestError as e:
             # Σφάλματα δικτύου (timeout, DNS, κλπ)
-            raise AtsigError(f"Network error while calling {url}: {str(e)}")
+            raise AtsigError(f"Network error while calling {url}: {str(e)}") from e
 
     async def get(self, endpoint: str, params: dict = None, **kwargs):
         """Executes an asynchronous GET request returning parsed data."""

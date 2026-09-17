@@ -1,10 +1,10 @@
 import json
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from redis.client import Pipeline
 
-from .manager import RedisManager
 from ..logger.config import get_logger
+from .manager import RedisManager
 
 logger = get_logger("atsig_common.redis.producer")
 
@@ -21,8 +21,8 @@ class EventProducer:
         self,
         stream_name: str,
         action: str,
-        payload: Dict[str, Any],
-        pipe: Optional[Union[RedisManager, Pipeline]] = None,
+        payload: dict[str, Any],
+        pipe: RedisManager | Pipeline | None = None,
     ) -> str:
         """
         Publishes an event to the specified Redis Stream.

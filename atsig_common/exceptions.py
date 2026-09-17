@@ -22,3 +22,11 @@ class BadRequestError(AtsigError):
 
 class ConflictError(AtsigError):
     pass
+
+
+class NonRetryableError(Exception):
+    """
+    Raise this when a failure is deterministic - retrying won't help
+    (e.g. invalid payload schema). Skips remaining retry attempts and
+    goes straight to DLQ instead of wasting retry_delay cycles.
+    """

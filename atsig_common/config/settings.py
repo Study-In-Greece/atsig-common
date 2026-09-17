@@ -1,4 +1,3 @@
-from typing import Optional
 from urllib.parse import quote
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -7,11 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class BaseAtsigSettings(BaseSettings):
     # --- 1. GENERAL / MONITORING ---
     ENVIRONMENT: str = "development"
-    GLITCHTIP_DSN: Optional[str] = None
+    GLITCHTIP_DSN: str | None = None
     ROOT_PATH: str = ""
     DOCS_URL: str = "/docs"
     REDOC_URL: str = "/redoc"
-    ATSIG_HOST_URL: Optional[str] = None
+    ATSIG_HOST_URL: str | None = None
 
     # --- 2. DATABASE (Shared Anchors) ---
     POSTGRES_USER: str
@@ -28,17 +27,17 @@ class BaseAtsigSettings(BaseSettings):
     KEYCLOAK_VERIFY_SSL: bool = True
 
     # --- 4. REDIS (Optional for shared base) ---
-    REDIS_SERVER: Optional[str] = None
+    REDIS_SERVER: str | None = None
     REDIS_PORT: int = 6379
-    REDIS_PASSWORD: Optional[str] = None
+    REDIS_PASSWORD: str | None = None
 
     # --- 5. STORAGE (Cloudflare R2 / S3) ---
     R2_ENDPOINT_URL: str
     R2_ACCESS_KEY_ID: str
     R2_SECRET_ACCESS_KEY: str
-    R2_PRIVATE_BUCKET: Optional[str] = None
-    R2_PUBLIC_BUCKET: Optional[str] = None
-    R2_PUBLIC_DOMAIN: Optional[str] = None
+    R2_PRIVATE_BUCKET: str | None = None
+    R2_PUBLIC_BUCKET: str | None = None
+    R2_PUBLIC_DOMAIN: str | None = None
 
     # --- COMPUTED PROPERTIES ---
     @property

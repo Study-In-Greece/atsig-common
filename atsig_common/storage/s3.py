@@ -1,6 +1,4 @@
 import aioboto3
-from typing import Optional
-
 from botocore.config import Config
 
 from .base import BaseStorage, BucketType
@@ -17,8 +15,8 @@ class S3Storage(BaseStorage):
         r2_endpoint_url: str,
         r2_access_key_id: str,
         r2_secret_access_key: str,
-        r2_private_bucket: Optional[str] = None,
-        r2_public_bucket: Optional[str] = None,
+        r2_private_bucket: str | None = None,
+        r2_public_bucket: str | None = None,
     ):
         """
         Initializes the storage manager with Cloudflare R2 credentials.
@@ -99,7 +97,7 @@ class S3Storage(BaseStorage):
         file_data: bytes,
         key: str,
         bucket_type: BucketType = "private",
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> str:
         """
         Uploads binary data to the specified bucket.

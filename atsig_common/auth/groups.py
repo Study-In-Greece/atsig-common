@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class GroupEnum(str, Enum):
+class GroupEnum(StrEnum):
     """
     Enumeration of Keycloak group paths used for RBAC (Role-Based Access Control).
 

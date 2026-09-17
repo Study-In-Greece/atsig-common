@@ -25,24 +25,24 @@ class UsersAPI(BaseAPI):
 
     async def get_secretaries_by_uuids(self, uuids: list[str]):
         return await self.get(
-            endpoint=f"/secretaries/by_ids",
+            endpoint="/secretaries/by_ids",
             params={"ids": uuids},
         )
 
     async def get_users_by_uuids(self, uuids: list[str]):
         return await self.get(
-            endpoint=f"/applicants/by_ids",
+            endpoint="/applicants/by_ids",
             params={"ids": uuids},
         )
 
     async def get_applicant_profiles_by_uuids(self, uuids: list[str]):
         return await self.get(
-            endpoint=f"/applicants/by_ids",
+            endpoint="/applicants/by_ids",
             params={"ids": uuids},
         )
 
     async def save_user(self, data: dict):
-        return await self.post(endpoint=f"/users", json=data)
+        return await self.post(endpoint="/users", json=data)
 
     async def get_applicant(self, applicant_id: str):
         return await self.get(endpoint=f"/applicants/{applicant_id}")
@@ -55,7 +55,5 @@ class UsersAPI(BaseAPI):
 
     async def get_applicant_media_url(self, applicant_id: str, key: str):
         return await self.get(
-            endpoint=f"/applicants/{applicant_id}/media-url",
-            params={"key": key}
+            endpoint=f"/applicants/{applicant_id}/media-url", params={"key": key}
         )
-

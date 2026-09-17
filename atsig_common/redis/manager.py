@@ -1,6 +1,7 @@
 import asyncio
 import json
-from typing import Optional, Any
+from typing import Any, Optional
+
 from redis.asyncio import Redis
 
 
@@ -16,9 +17,7 @@ class RedisManager:
     _instance: Optional["RedisManager"] = None
     _lock = asyncio.Lock()
 
-    def __init__(
-        self, host: str, port: int, password: Optional[str] = None, db: int = 0
-    ):
+    def __init__(self, host: str, port: int, password: str | None = None, db: int = 0):
         """
         Initializes the RedisManager with connection details.
 
@@ -28,7 +27,7 @@ class RedisManager:
             password (Optional[str]): Connection password if required. Defaults to None.
             db (int): Database index to use. Defaults to 0.
         """
-        self._redis: Optional[Redis] = None
+        self._redis: Redis | None = None
         self.host = host
         self.port = port
         self.password = password
@@ -74,7 +73,7 @@ class RedisManager:
     # ------------------------------
     # Common async helpers
     # ------------------------------
-    async def get_json(self, key: str) -> Optional[Any]:
+    async def get_json(self, key: str) -> Any | None:
         """
         Retrieves a value from Redis and parses it from JSON.
 
@@ -87,7 +86,7 @@ class RedisManager:
         data = await self.get(key)
         return json.loads(data) if data else None
 
-    async def set_json(self, key: str, value: Any, expire: Optional[int] = None):
+    async def set_json(self, key: str, value: Any, expire: int | None = None):
         """
         Serializes a value to JSON and stores it in Redis.
 
@@ -98,11 +97,11 @@ class RedisManager:
         """
         await self.set(key, json.dumps(value), expire=expire)
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         """Fetches a string value for the given key."""
         return await self.redis.get(key)
 
-    async def set(self, key: str, value: Any, expire: Optional[int] = None):
+    async def set(self, key: str, value: Any, expire: int | None = None):
         """Stores a value in Redis with an optional expiration time."""
         await self.redis.set(name=key, value=value, ex=expire)
 
@@ -114,7 +113,7 @@ class RedisManager:
         """Checks if the specified key exists in Redis."""
         return bool(await self.redis.exists(key))
 
-    async def expire(self, key: str, expire: Optional[int] = None):
+    async def expire(self, key: str, expire: int | None = None):
         """Sets an expiration timeout on a key."""
         await self.redis.expire(key, expire)
 

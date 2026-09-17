@@ -1,72 +1,39 @@
 [project]
 name = "atsig-common"
-version = "0.4.0"
+version = "0.5.0"
 description = "Shared utilities for ATSIG microservices"
-authors = [
-    { name = "th-papaz" }
-]
+authors = [{ name = "th-papaz" }]
 requires-python = ">=3.13"
 
-dependencies = [
-    "pydantic[email]>=2.12.0,<3.0.0",
-    "pydantic-settings>=2.7.0"
-]
+dependencies = ["pydantic[email]>=2.12.0,<3.0.0", "pydantic-settings>=2.7.0"]
 
 [project.optional-dependencies]
 
-fastapi = [
-    "fastapi==0.128.0",
-    "starlette==0.50.0",
-]
+fastapi = ["fastapi==0.128.0", "starlette==0.50.0"]
 
-storage = [
-    "aioboto3==15.5.0",
-]
+storage = ["aioboto3==15.5.0"]
 
-db = [
-    "SQLAlchemy==2.0.45",
-    "asyncpg==0.31.0",
-    "alembic>=1.16,<2.0",
-]
+db = ["SQLAlchemy==2.0.45", "asyncpg==0.31.0", "alembic>=1.16,<2.0"]
 
-redis = [
-    "redis==7.1.0",
-]
+redis = ["redis==7.1.0"]
 
-celery = [
-    "celery==5.5.0",
-]
+celery = ["celery==5.5.0"]
 
-http = [
-    "httpx==0.28.1",
-]
+http = ["httpx==0.28.1"]
 
-auth = [
-    "python-keycloak==6.0.0",
-    "cryptography>=46.0.0",
-]
+auth = ["python-keycloak==6.0.0", "cryptography>=46.0.0"]
 
-files = [
-    "aiofiles==25.1.0",
-    "python-multipart==0.0.21",
-]
+files = ["aiofiles==25.1.0", "python-multipart==0.0.21"]
 
-observability = [
-    "sentry-sdk==2.54.0",
-    "PyJWT>=2.8.0",
-]
+observability = ["sentry-sdk==2.54.0", "PyJWT>=2.8.0"]
 
-cli = [
-    "typer>=0.21,<1.0",
-]
+cli = ["typer>=0.21,<1.0"]
 
 # 🔹 Dev tools
-dev = [
-    "black==25.12.0",
-]
+dev = ["ruff>=0.9,<1.0"]
 
 all = [
-    "atsig-common[fastapi,db,redis,storage,http,auth,celery,files,observability,cli]"
+    "atsig-common[fastapi,db,redis,storage,http,auth,celery,files,observability,cli]",
 ]
 
 [build-system]
@@ -77,3 +44,26 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["atsig_common*"]
+
+# 🔹 Ruff config — matches programmes-api / applications-api
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade (modern syntax, e.g. dict[str, Any] over Dict)
+    "B",   # bugbear (common bug patterns)
+    "SIM", # simplify
+]
+ignore = [
+    "E501",   # long docstring lines — follow-up cleanup commit, tracked separately
+    "UP046",  # Generic[T] -> PEP 695 refactor — needs its own PR, touches shared base classes
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

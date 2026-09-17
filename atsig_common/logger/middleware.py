@@ -1,12 +1,13 @@
+import logging
 import time
 import uuid
+
 import jwt
-import logging
 import sentry_sdk
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from atsig_common.logger.context import request_id_var, user_id_var, user_email_var
+from atsig_common.logger.context import request_id_var, user_email_var, user_id_var
 
 logger = logging.getLogger(__name__)
 

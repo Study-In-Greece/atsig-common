@@ -1,12 +1,13 @@
-from sqlalchemy import select
-from typing import Optional, TypeVar, Generic, Any, Type, Union, Dict, List, Callable
+from collections.abc import Callable
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.policy import BaseAccessPolicy
-from ..exceptions import NotFoundError, ForbiddenError
-from ..pagination import PaginationParams, PaginatedResponse, paginate_query
+from ..exceptions import ForbiddenError, NotFoundError
+from ..pagination import PaginatedResponse, PaginationParams, paginate_query
 
 ModelType = TypeVar("ModelType")
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
@@ -42,7 +43,7 @@ class CRUDBaseService(
     given SQLAlchemy model, using Pydantic schemas for data validation.
     """
 
-    def __init__(self, model: Type[ModelType], session: AsyncSession):
+    def __init__(self, model: type[ModelType], session: AsyncSession):
         """
         Initializes the CRUD service for a specific model.
 
@@ -71,7 +72,7 @@ class CRUDBaseService(
             raise NotFoundError(f"{self.model.__name__} not found")
         return obj
 
-    async def get(self, resource_id: Any) -> Optional[ModelType]:
+    async def get(self, resource_id: Any) -> ModelType | None:
         """Fetches a single record by its primary key."""
         return await self.session.get(self.model, resource_id)
 
@@ -80,7 +81,7 @@ class CRUDBaseService(
         *,
         query=None,
         pagination: PaginationParams,
-        sort_model: Type[ModelType] = None,
+        sort_model: type[ModelType] = None,
     ) -> PaginatedResponse:
         """
         Fetches multiple records with pagination and optional sorting.
@@ -102,8 +103,8 @@ class CRUDBaseService(
     async def create(
         self,
         *,
-        obj_in: Union[CreateSchemaType, dict[str, Any]],
-        exclude: Optional[set[str]] = None,
+        obj_in: CreateSchemaType | dict[str, Any],
+        exclude: set[str] | None = None,
         **extra_data: Any,
     ) -> ModelType:
         """
@@ -135,8 +136,8 @@ class CRUDBaseService(
         self,
         *,
         db_obj: ModelType,
-        obj_in: Union[UpdateSchemaType, Dict[str, Any]],
-        exclude: Optional[set[str]] = None,
+        obj_in: UpdateSchemaType | dict[str, Any],
+        exclude: set[str] | None = None,
     ) -> ModelType:
         """
         Updates an existing database record.
@@ -168,8 +169,8 @@ class CRUDBaseService(
     async def find_and_update(
         self,
         resource_id: Any,
-        obj_in: Union[UpdateSchemaType, Dict[str, Any]],
-        exclude: Optional[set[str]] = None,
+        obj_in: UpdateSchemaType | dict[str, Any],
+        exclude: set[str] | None = None,
     ) -> ModelType:
         """
         Combines fetch and update in a single operation.
@@ -189,13 +190,13 @@ class CRUDBaseService(
         db_obj = await self.get_or_404(resource_id)
         await self.session.delete(db_obj)
 
-    async def get_all(self) -> List[ModelType]:
+    async def get_all(self) -> list[ModelType]:
         """Fetches all objects of the model without pagination."""
         query = select(self.model)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_by_ids(self, resource_ids: List[Any]) -> List[ModelType]:
+    async def get_by_ids(self, resource_ids: list[Any]) -> list[ModelType]:
         """Fetches multiple objects filtering by a list of IDs."""
         query = select(self.model).where(self.model.id.in_(resource_ids))
         result = await self.session.execute(query)
@@ -209,7 +210,7 @@ class BaseAuthService(BaseService, Generic[PolicyType]):
     This service requires a Policy instance to handle permission checks.
     """
 
-    def __init__(self, session: AsyncSession, policy: Optional[PolicyType] = None):
+    def __init__(self, session: AsyncSession, policy: PolicyType | None = None):
         """
         Initializes the service with DB session and Auth Policy.
 
@@ -235,9 +236,9 @@ class CRUDBaseAuthService(
 
     def __init__(
         self,
-        model: Type[ModelType],
+        model: type[ModelType],
         session: AsyncSession,
-        policy: Optional[PolicyType] = None,
+        policy: PolicyType | None = None,
     ):
         super().__init__(model, session)
         self.policy = policy
@@ -262,8 +263,7 @@ class CRUDBaseAuthService(
         """
         db_obj = await self.get_or_404(resource_id)
 
-        if self.policy:
-            if not check_callback(db_obj, self.policy):
-                raise ForbiddenError("You are not authorized to perform this action")
+        if self.policy and not check_callback(db_obj, self.policy):
+            raise ForbiddenError("You are not authorized to perform this action")
 
         return db_obj

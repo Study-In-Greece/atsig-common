@@ -1,12 +1,13 @@
 import asyncio
 import json
 import uuid
-from typing import Dict, Any
+from typing import Any
 
 from redis.exceptions import ResponseError
 
-from .manager import RedisManager
+from ..exceptions import NonRetryableError
 from ..logger.config import get_logger
+from .manager import RedisManager
 
 logger = get_logger("atsig_common.redis.consumer")
 
@@ -124,7 +125,7 @@ class BaseRedisConsumer:
         self,
         message_id: str,
         action: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ):
         """
         Override this method in each service.
@@ -144,14 +145,13 @@ class BaseRedisConsumer:
     async def _handle_message(
         self,
         message_id: str,
-        raw_payload: Dict[str, Any],
+        raw_payload: dict[str, Any],
     ):
         """
         Handle a single message lifecycle.
         """
 
         async with self._semaphore:
-
             try:
                 normalized_payload = {
                     self._decode(k): self._decode(v) for k, v in raw_payload.items()
@@ -169,21 +169,17 @@ class BaseRedisConsumer:
 
                 last_error = None
 
-                for attempt in range(1, self.max_retries + 1):
+                skipped_retries = False
 
+                for attempt in range(1, self.max_retries + 1):
                     try:
                         logger.debug(
                             f"[Consumer] Processing message "
                             f"{message_id} (attempt {attempt})"
                         )
 
-                        await self.process_message(
-                            message_id,
-                            action,
-                            payload,
-                        )
+                        await self.process_message(message_id, action, payload)
 
-                        # ACK only after successful processing
                         await self.redis_manager.xack(
                             self.stream_name,
                             self.group_name,
@@ -193,27 +189,33 @@ class BaseRedisConsumer:
                         logger.debug(
                             f"[Consumer] Message {message_id} ACKed successfully."
                         )
-
                         return
 
-                    except Exception as processing_error:
+                    except NonRetryableError as non_retryable_error:
+                        last_error = str(non_retryable_error)
+                        skipped_retries = True
 
+                        logger.error(
+                            f"[Consumer] Non-retryable error processing {message_id}: "
+                            f"{last_error}. Skipping remaining retries."
+                        )
+                        break
+
+                    except Exception as processing_error:
                         last_error = str(processing_error)
 
                         logger.error(
-                            f"[Consumer] Error processing "
-                            f"{message_id} "
-                            f"(attempt {attempt}/{self.max_retries}): "
-                            f"{last_error}"
+                            f"[Consumer] Error processing {message_id} "
+                            f"(attempt {attempt}/{self.max_retries}): {last_error}"
                         )
 
                         if attempt < self.max_retries:
                             await asyncio.sleep(self.retry_delay)
 
-                # Max retries exceeded -> DLQ
+                # Max retries exceeded OR non-retryable error -> DLQ
                 logger.error(
-                    f"[Consumer] Max retries exceeded for "
-                    f"{message_id}. Sending to DLQ."
+                    f"[Consumer] {'Non-retryable error' if skipped_retries else 'Max retries exceeded'} "
+                    f"for {message_id}. Sending to DLQ."
                 )
 
                 await self._send_to_dlq(
@@ -222,7 +224,6 @@ class BaseRedisConsumer:
                     error_msg=last_error,
                 )
 
-                # ACK after DLQ
                 await self.redis_manager.xack(
                     self.stream_name,
                     self.group_name,
@@ -230,10 +231,8 @@ class BaseRedisConsumer:
                 )
 
             except Exception as fatal_error:
-
                 logger.exception(
-                    f"[Consumer] Fatal handler error for "
-                    f"{message_id}: {fatal_error}"
+                    f"[Consumer] Fatal handler error for {message_id}: {fatal_error}"
                 )
 
                 # Emergency ACK to prevent infinite poison loops
@@ -245,13 +244,12 @@ class BaseRedisConsumer:
                     )
 
                     logger.critical(
-                        f"[Consumer] Emergency ACK applied for " f"{message_id}."
+                        f"[Consumer] Emergency ACK applied for {message_id}."
                     )
 
                 except Exception as ack_error:
                     logger.critical(
-                        f"[Consumer] Emergency ACK FAILED for "
-                        f"{message_id}: {ack_error}"
+                        f"[Consumer] Emergency ACK FAILED for {message_id}: {ack_error}"
                     )
 
     async def run(self):
@@ -267,7 +265,6 @@ class BaseRedisConsumer:
         )
 
         while self._is_running:
-
             try:
                 response = await self.redis_manager.xreadgroup(
                     groupname=self.group_name,
@@ -283,9 +280,7 @@ class BaseRedisConsumer:
                 tasks = []
 
                 for _, messages in response:
-
                     for message_id, raw_payload in messages:
-
                         tasks.append(
                             self._handle_message(
                                 message_id,
@@ -297,17 +292,14 @@ class BaseRedisConsumer:
                     await asyncio.gather(*tasks, return_exceptions=True)
 
             except asyncio.CancelledError:
-
                 logger.info(f"[Consumer] {self.consumer_name} stopping gracefully...")
 
                 self._is_running = False
                 break
 
             except Exception as loop_error:
-
                 logger.exception(
-                    f"[Consumer] Critical loop error: "
-                    f"{loop_error}. Retrying in 5s..."
+                    f"[Consumer] Critical loop error: {loop_error}. Retrying in 5s..."
                 )
 
                 await asyncio.sleep(5)

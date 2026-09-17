@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
+
 from celery import Celery
+
 from ..logger.config import get_logger
 
 logger = get_logger("atsig_common.email.client")
@@ -34,8 +36,8 @@ class AsyncEmailClient:
         self,
         template_name: str,
         context: dict,
-        user_id: Optional[str] = None,
-        recipient_email: Optional[str] = None,
+        user_id: str | None = None,
+        recipient_email: str | None = None,
         priority: Literal["high", "low"] = "high",
     ) -> str:
         """
@@ -82,8 +84,8 @@ class AsyncEmailClient:
         self,
         template_name: str,
         context: dict,
-        user_ids: Optional[list[str]] = None,
-        recipients: Optional[list[str]] = None,
+        user_ids: list[str] | None = None,
+        recipients: list[str] | None = None,
     ) -> str:
         """
         Sends a single task to Celery containing multiple recipients.

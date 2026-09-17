@@ -1,7 +1,6 @@
-from typing import List, Dict, Optional
-from .manager import RedisManager
 from ..api_client.clients.uni_api import UniAPI
 from ..logger.config import get_logger
+from .manager import RedisManager
 
 logger = get_logger("atsig_common.redis.uni_cache")
 
@@ -52,8 +51,8 @@ class UniCache:
         logger.info("[UniCache] University map update completed")
 
     async def get_departments_by_ids_cached(
-        self, department_ids: List[int]
-    ) -> Dict[int, dict]:
+        self, department_ids: list[int]
+    ) -> dict[int, dict]:
         departments = {}
         missing_ids = []
         """Fetch department data from cache or external API if missing."""
@@ -85,8 +84,8 @@ class UniCache:
         return departments
 
     async def get_departments_by_university_ids_cached(
-        self, university_ids: List[int]
-    ) -> Dict[int, dict]:
+        self, university_ids: list[int]
+    ) -> dict[int, dict]:
         """
         Fetch all departments for the given university_ids, using Redis cache if available.
         Returns a dict: {department_id: department_dict}.
@@ -96,8 +95,8 @@ class UniCache:
         logger.info(
             f"[UniCache] Requesting departments for universities: {university_ids}"
         )
-        departments: Dict[int, dict] = {}
-        missing_unis: List[int] = []
+        departments: dict[int, dict] = {}
+        missing_unis: list[int] = []
 
         # Assuming Redis hash stores department_id → university_id mapping
         all_dep_map = await self.redis.hgetall(self.UNI_HASH_KEY)
@@ -173,7 +172,7 @@ class UniCache:
         )
         return department_map
 
-    async def get_department_by_id_cached(self, department_id: int) -> Optional[dict]:
+    async def get_department_by_id_cached(self, department_id: int) -> dict | None:
         """
         Fetch a single department from cache or UniAPI.
         Returns the department dict or None if not found.

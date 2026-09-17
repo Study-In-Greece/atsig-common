@@ -1,8 +1,9 @@
-from typing import Any, Optional, Protocol
-from .http_manager import HttpClientManager
+from typing import Protocol
+
+from ..auth.service_token import ServiceTokenManager
 from .clients.uni_api import UniAPI
 from .clients.users_api import UsersAPI
-from ..auth.service_token import ServiceTokenManager
+from .http_manager import HttpClientManager
 
 
 class APIClientSettingsProto(Protocol):
@@ -14,8 +15,8 @@ class APIClientSettingsProto(Protocol):
     IDE autocompletion and structural validation.
     """
 
-    UNI_API_URL: Optional[str] = None
-    PROFILES_API_URL: Optional[str] = None
+    UNI_API_URL: str | None = None
+    PROFILES_API_URL: str | None = None
 
 
 class APIClientFactory:
@@ -30,7 +31,7 @@ class APIClientFactory:
     def __init__(
         self,
         settings: APIClientSettingsProto,
-        token_manager: Optional[ServiceTokenManager] = None,
+        token_manager: ServiceTokenManager | None = None,
     ):
         """
         Initializes the factory with the required configuration and optional auth manager.
