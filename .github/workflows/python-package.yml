@@ -2,9 +2,9 @@ name: Atsig Common CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
@@ -12,26 +12,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Εδώ βάζουμε τη version που χρησιμοποιούμε στα Dockerfiles μας
+        # Here we specify the version we use in our Dockerfiles.
         python-version: ["3.13"]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        # Εγκατάσταση του πακέτου σε editable mode με όλα τα extras
-        pip install -e ".[all]"
-        # Εγκατάσταση εργαλείων για testing και linting
-        pip install pytest black
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
 
-    - name: Lint with Black
-      run: |
-        # Ελέγχει αν ο κώδικας ακολουθεί το σωστό formatting
-        black --check .
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
