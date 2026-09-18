@@ -27,7 +27,7 @@ atsig-common[fastapi,db,redis,auth] @ git+https://github.com/<org>/atsig-common@
 ## Local development setup
 
 ```bash
-git clone <repo-url>
+git clone git@github.com:Study-In-Greece/atsig-common.git
 cd atsig-common
 uv sync --all-extras
 ```
