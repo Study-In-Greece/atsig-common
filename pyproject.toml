@@ -30,7 +30,7 @@ observability = ["sentry-sdk==2.54.0", "PyJWT>=2.8.0"]
 cli = ["typer>=0.21,<1.0"]
 
 # 🔹 Dev tools
-dev = ["ruff>=0.9,<1.0"]
+dev = ["ruff>=0.16.5", "pre-commit>=4.6.2"]
 
 all = [
     "atsig-common[fastapi,db,redis,storage,http,auth,celery,files,observability,cli]",

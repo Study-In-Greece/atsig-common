@@ -57,7 +57,8 @@ Configuration lives in `pyproject.toml` under `[tool.ruff]`, and mirrors the con
 
 1. Branch off `main`.
 2. Make your change. Keep it scoped — this package is a dependency of multiple live services, so unrelated cleanup (e.g. docstring rewrapping, generic-class refactors) belongs in its own PR, not mixed into a feature change.
-3. Run `uv run ruff check .` and `uv run ruff format .` before committing — CI (if configured) will otherwise flag it.
+3. Run `uv run pre-commit install` once after cloning, so Ruff runs
+   automatically on every commit.
 4. Bump `version` in `pyproject.toml` following semver:
    - **patch** (`0.5.0` → `0.5.1`) — bug fixes, no new public API.
    - **minor** (`0.5.0` → `0.6.0`) — new public classes/functions, backward-compatible.
