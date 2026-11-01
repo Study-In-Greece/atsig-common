@@ -1,3 +1,4 @@
+import asyncio
 import time
 
 from keycloak import KeycloakOpenID
@@ -22,6 +23,23 @@ class ServiceTokenManager:
         self._token = None
         self._expires_at = 0
         self.keycloak_client = keycloak_client
+        self._refresh_lock = asyncio.Lock()
+
+    def _is_fresh(self) -> bool:
+        return bool(self._token) and time.time() < self._expires_at - 30
+
+    async def aget_token(self) -> str:
+        """
+        Same as `get_token`, for async code. A refresh calls Keycloak over the
+        network, which blocks, so it runs in a thread, and only one refresh runs at a
+        time: requests that arrive meanwhile wait for it and share its token.
+        """
+        if self._is_fresh():
+            return self._token
+        async with self._refresh_lock:
+            if self._is_fresh():
+                return self._token
+            return await asyncio.to_thread(self.get_token)
 
     def get_token(self):
         """
@@ -35,7 +53,7 @@ class ServiceTokenManager:
             str: A valid access token for the service.
         """
         # Check if the current token is still valid with a 30-second safety margin
-        if self._token and time.time() < self._expires_at - 30:
+        if self._is_fresh():
             return self._token
         # Request new token data from Keycloak
         token_data = self.keycloak_client.token(grant_type="client_credentials")

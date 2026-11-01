@@ -7,9 +7,21 @@ import sentry_sdk
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from atsig_common.logger.context import request_id_var, user_email_var, user_id_var
+from atsig_common.logger.context import (
+    is_valid_request_id,
+    request_id_var,
+    user_email_var,
+    user_id_var,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_request_id(incoming: str | None) -> str:
+    """The id of the request: the one sent by the client/proxy when it is valid."""
+    if is_valid_request_id(incoming):
+        return incoming
+    return uuid.uuid4().hex[:8]
 
 
 def loggable_path(request: Request) -> str:
@@ -37,10 +49,16 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
        error logs contain the correct Request ID and User Email.
     """
 
+    def __init__(self, app, include_user_email: bool = True):
+        super().__init__(app)
+        # When False the email of the user is neither logged nor sent to Sentry
+        self.include_user_email = include_user_email
+
     async def dispatch(self, request: Request, call_next):
         # 1. Handle Correlation ID (Request ID)
-        # Use provided header if behind a proxy, otherwise generate a new short UUID
-        request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:8])
+        # Use the provided header if it is valid (behind a proxy, or a call from
+        # another service), otherwise generate a new short UUID
+        request_id = resolve_request_id(request.headers.get("X-Request-ID"))
         token_rid = request_id_var.set(request_id)
 
         # Inject Request ID into Sentry/GlitchTip scope
@@ -59,7 +77,7 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
                 payload = jwt.decode(token, options={"verify_signature": False})
 
                 user_id = payload.get("sub")
-                user_email = payload.get("email")
+                user_email = payload.get("email") if self.include_user_email else None
 
                 # Inject User info into Sentry/GlitchTip scope
                 sentry_sdk.set_user({"id": user_id, "email": user_email})

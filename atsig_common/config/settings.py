@@ -11,6 +11,12 @@ class BaseAtsigSettings(BaseSettings):
     DOCS_URL: str = "/docs"
     REDOC_URL: str = "/redoc"
     ATSIG_HOST_URL: str | None = None
+    # Origins the browsers may call the API from ("*" keeps the behaviour of today).
+    # In the environment it is a JSON list: CORS_ORIGINS=["https://a.gr","https://b.gr"]
+    CORS_ORIGINS: list[str] = ["*"]
+    # The email of the user on every log line (and in Sentry). Turn it off to keep
+    # personal data out of the logs: the user id is still written.
+    LOG_USER_EMAIL: bool = True
 
     # --- 2. DATABASE (Shared Anchors) ---
     POSTGRES_USER: str

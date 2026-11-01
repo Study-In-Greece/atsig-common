@@ -1,0 +1,111 @@
+import logging.config
+from types import SimpleNamespace
+
+import sentry_sdk
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from atsig_common import observability
+from atsig_common.observability import (
+    init_observability,
+    scrub_sentry_event,
+    setup_app,
+)
+
+
+def settings(environment="development", dsn=None, origins=("*",)):
+    return SimpleNamespace(
+        ENVIRONMENT=environment, GLITCHTIP_DSN=dsn, CORS_ORIGINS=list(origins)
+    )
+
+
+def test_scrub_replaces_the_url_path_with_the_route_template():
+    event = {
+        "transaction": "/references/{token}",
+        "request": {
+            "url": "https://api.example.gr/references/3f1c9a52-8d2e?x=1",
+            "query_string": "x=1",
+        },
+    }
+
+    scrubbed = scrub_sentry_event(event)
+
+    assert scrubbed["request"] == {"url": "https://api.example.gr/references/{token}"}
+
+
+def test_scrub_leaves_events_without_a_request_alone():
+    event = {"message": "boom"}
+
+    assert scrub_sentry_event(event) == {"message": "boom"}
+
+
+def test_init_does_not_start_sentry_outside_production(monkeypatch):
+    configs, inits = [], []
+    monkeypatch.setattr(logging.config, "dictConfig", configs.append)
+    monkeypatch.setattr(sentry_sdk, "init", lambda **kw: inits.append(kw))
+
+    started = init_observability(settings("development", dsn="https://x@y/1"), "svc")
+
+    assert started is False and inits == []
+    assert len(configs) == 1 and "svc" in configs[0]["loggers"]
+
+
+def test_init_starts_sentry_in_production_with_the_scrub_hook(monkeypatch):
+    inits = []
+    monkeypatch.setattr(logging.config, "dictConfig", lambda config: None)
+    monkeypatch.setattr(sentry_sdk, "init", lambda **kw: inits.append(kw))
+
+    started = init_observability(settings("production", dsn="https://x@y/1"), "svc")
+
+    assert started is True
+    assert inits[0]["before_send"] is observability.scrub_sentry_event
+    assert inits[0]["environment"] == "production"
+
+
+def test_init_needs_a_dsn_even_in_production(monkeypatch):
+    monkeypatch.setattr(logging.config, "dictConfig", lambda config: None)
+
+    assert init_observability(settings("production", dsn=None), "svc") is False
+
+
+def make_client(conf) -> TestClient:
+    app = FastAPI()
+    setup_app(app, conf)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_debug_route_exists_outside_production_only():
+    assert make_client(settings("development")).get("/debug-error").status_code == 500
+    assert make_client(settings("production")).get("/debug-error").status_code == 404
+
+
+def test_debug_route_can_be_forced():
+    app = FastAPI()
+    setup_app(app, settings("production"), debug_route=True)
+
+    client = TestClient(app, raise_server_exceptions=False)
+    assert client.get("/debug-error").status_code == 500
+
+
+def test_cors_origins_come_from_the_settings():
+    client = make_client(settings(origins=("https://apply.example.gr",)))
+
+    allowed = client.get("/nope", headers={"Origin": "https://apply.example.gr"})
+    refused = client.get("/nope", headers={"Origin": "https://evil.example"})
+
+    assert allowed.headers["access-control-allow-origin"] == "https://apply.example.gr"
+    assert "access-control-allow-origin" not in refused.headers
+
+
+def test_exception_handlers_are_installed():
+    app = FastAPI()
+    setup_app(app, settings())
+
+    @app.post("/x")
+    async def x(value: int):
+        return value
+
+    response = TestClient(app).post("/x", params={"value": "nope"})
+
+    assert response.status_code == 422
+    assert set(response.json()["detail"][0]) == {"type", "loc", "msg"}

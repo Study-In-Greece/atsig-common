@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from typing import Literal
 
@@ -119,3 +120,15 @@ class AsyncEmailClient:
         except Exception as e:
             logger.error(f"[EmailClient] Failed to queue bulk email task: {e}")
             raise e
+
+    async def asend_email(self, *args, **kwargs) -> str:
+        """
+        `send_email` for async code. Queuing a task is a network call to the broker
+        that blocks (and waits for retries when the broker is down), so it runs in a
+        thread and the event loop keeps serving other requests.
+        """
+        return await asyncio.to_thread(self.send_email, *args, **kwargs)
+
+    async def asend_bulk_emails(self, *args, **kwargs) -> str:
+        """`send_bulk_emails` for async code (see `asend_email`)."""
+        return await asyncio.to_thread(self.send_bulk_emails, *args, **kwargs)

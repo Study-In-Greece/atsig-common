@@ -7,6 +7,7 @@ from redis.exceptions import ResponseError
 
 from ..exceptions import NonRetryableError
 from ..logger.config import get_logger
+from ..logger.context import is_valid_request_id, request_id_var
 from .manager import RedisManager
 
 logger = get_logger("atsig_common.redis.consumer")
@@ -42,6 +43,7 @@ class BaseRedisConsumer:
         retry_delay: int = 2,
         concurrency: int = 10,
         group_start_id: str = "0",
+        dlq_maxlen: int | None = None,
     ):
         self.redis_manager = redis_manager
         self.stream_name = stream_name
@@ -61,6 +63,10 @@ class BaseRedisConsumer:
         # stream) are not lost. "$" would read only what arrives afterwards.
         # An existing group keeps its own position and ignores this.
         self.group_start_id = group_start_id
+
+        # When set, the DLQ is trimmed to about this many entries (oldest first).
+        # None keeps every failed entry until somebody discards it.
+        self.dlq_maxlen = dlq_maxlen
 
         self._is_running = False
         self._semaphore = asyncio.Semaphore(concurrency)
@@ -87,6 +93,11 @@ class BaseRedisConsumer:
             else:
                 raise e
 
+    def _dlq_options(self) -> dict[str, Any]:
+        if self.dlq_maxlen is None:
+            return {}
+        return {"maxlen": self.dlq_maxlen, "approximate": True}
+
     async def _send_to_dlq(
         self,
         message_id: str,
@@ -106,6 +117,7 @@ class BaseRedisConsumer:
                     "error": error_msg,
                     "consumer_group": self.group_name,
                 },
+                **self._dlq_options(),
             )
 
             logger.warning(
@@ -180,6 +192,15 @@ class BaseRedisConsumer:
 
         return action, payload
 
+    def _request_id_of(self, raw_payload: dict[str, Any]) -> str | None:
+        """The request id the producer put in `meta`. A bad or missing `meta` is ignored."""
+        try:
+            meta = {self._decode(k): self._decode(v) for k, v in raw_payload.items()}
+            request_id = json.loads(meta.get("meta") or "{}")["request_id"]
+        except Exception:
+            return None
+        return request_id if is_valid_request_id(request_id) else None
+
     async def _reject_invalid_message(
         self, message_id: str, raw_payload: dict[str, Any], reason: str
     ):
@@ -206,9 +227,20 @@ class BaseRedisConsumer:
         raw_payload: dict[str, Any],
     ):
         """
-        Handle a single message lifecycle.
+        Handle a single message lifecycle, logging under the id of the request that
+        caused the event (or under the id of the entry, when it carries none).
         """
+        token = request_id_var.set(self._request_id_of(raw_payload) or message_id)
+        try:
+            await self._handle_entry(message_id, raw_payload)
+        finally:
+            request_id_var.reset(token)
 
+    async def _handle_entry(
+        self,
+        message_id: str,
+        raw_payload: dict[str, Any],
+    ):
         async with self._semaphore:
             try:
                 try:
