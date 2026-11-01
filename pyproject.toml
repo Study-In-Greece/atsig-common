@@ -30,7 +30,12 @@ observability = ["sentry-sdk==2.54.0", "PyJWT>=2.8.0"]
 cli = ["typer>=0.21,<1.0"]
 
 # 🔹 Dev tools
-dev = ["ruff>=0.16.5", "pre-commit>=4.6.2"]
+dev = [
+    "ruff>=0.16.5",
+    "pre-commit>=4.6.2",
+    "pytest>=8.3,<10",
+    "pytest-asyncio>=1.0,<2",
+]
 
 all = [
     "atsig-common[fastapi,db,redis,storage,http,auth,celery,files,observability,cli]",
@@ -44,6 +49,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["atsig_common*"]
+
+# 🔹 Pytest config — pure-logic tests only (no database, no network)
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 # 🔹 Ruff config — matches programmes-api / applications-api
 [tool.ruff]
