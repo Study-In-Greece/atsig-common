@@ -42,6 +42,7 @@ class BaseRedisConsumer:
         retry_delay: int = 2,
         concurrency: int = 10,
         group_start_id: str = "0",
+        dlq_maxlen: int | None = None,
     ):
         self.redis_manager = redis_manager
         self.stream_name = stream_name
@@ -61,6 +62,10 @@ class BaseRedisConsumer:
         # stream) are not lost. "$" would read only what arrives afterwards.
         # An existing group keeps its own position and ignores this.
         self.group_start_id = group_start_id
+
+        # When set, the DLQ is trimmed to about this many entries (oldest first).
+        # None keeps every failed entry until somebody discards it.
+        self.dlq_maxlen = dlq_maxlen
 
         self._is_running = False
         self._semaphore = asyncio.Semaphore(concurrency)
@@ -87,6 +92,11 @@ class BaseRedisConsumer:
             else:
                 raise e
 
+    def _dlq_options(self) -> dict[str, Any]:
+        if self.dlq_maxlen is None:
+            return {}
+        return {"maxlen": self.dlq_maxlen, "approximate": True}
+
     async def _send_to_dlq(
         self,
         message_id: str,
@@ -106,6 +116,7 @@ class BaseRedisConsumer:
                     "error": error_msg,
                     "consumer_group": self.group_name,
                 },
+                **self._dlq_options(),
             )
 
             logger.warning(
