@@ -44,6 +44,9 @@ class BaseRedisConsumer:
         concurrency: int = 10,
         group_start_id: str = "0",
         dlq_maxlen: int | None = None,
+        max_loop_failures: int = 20,
+        loop_error_delay: float = 5,
+        loop_error_max_delay: float = 60,
     ):
         self.redis_manager = redis_manager
         self.stream_name = stream_name
@@ -67,6 +70,16 @@ class BaseRedisConsumer:
         # When set, the DLQ is trimmed to about this many entries (oldest first).
         # None keeps every failed entry until somebody discards it.
         self.dlq_maxlen = dlq_maxlen
+
+        # When reading from Redis keeps failing (it is down, the connection broke),
+        # `run` waits `loop_error_delay` seconds, then twice as long, up to
+        # `loop_error_max_delay`. After `max_loop_failures` failures IN A ROW it gives
+        # up and raises, so the process exits and the orchestrator restarts it. A
+        # consumer that retried silently for ever looked alive and did nothing.
+        # 0 means never give up.
+        self.max_loop_failures = max_loop_failures
+        self.loop_error_delay = loop_error_delay
+        self.loop_error_max_delay = loop_error_max_delay
 
         self._is_running = False
         self._semaphore = asyncio.Semaphore(concurrency)
@@ -241,33 +254,36 @@ class BaseRedisConsumer:
         message_id: str,
         raw_payload: dict[str, Any],
     ):
-        async with self._semaphore:
+        # The semaphore limits the messages being PROCESSED at the same time. It is
+        # taken for an attempt only, never while waiting before the next attempt: a
+        # failing message must not hold a slot while it sleeps.
+        try:
             try:
+                normalized_payload = {
+                    self._decode(k): self._decode(v) for k, v in raw_payload.items()
+                }
+                action, payload = self._parse_envelope(normalized_payload)
+            except Exception as envelope_error:
+                reason = (
+                    str(envelope_error)
+                    if isinstance(envelope_error, InvalidMessageError)
+                    else f"unreadable entry ({type(envelope_error).__name__})"
+                )
+                await self._reject_invalid_message(message_id, raw_payload, reason)
+                return
+
+            last_error = None
+
+            skipped_retries = False
+
+            for attempt in range(1, self.max_retries + 1):
                 try:
-                    normalized_payload = {
-                        self._decode(k): self._decode(v) for k, v in raw_payload.items()
-                    }
-                    action, payload = self._parse_envelope(normalized_payload)
-                except Exception as envelope_error:
-                    reason = (
-                        str(envelope_error)
-                        if isinstance(envelope_error, InvalidMessageError)
-                        else f"unreadable entry ({type(envelope_error).__name__})"
+                    logger.debug(
+                        f"[Consumer] Processing message "
+                        f"{message_id} (attempt {attempt})"
                     )
-                    await self._reject_invalid_message(message_id, raw_payload, reason)
-                    return
 
-                last_error = None
-
-                skipped_retries = False
-
-                for attempt in range(1, self.max_retries + 1):
-                    try:
-                        logger.debug(
-                            f"[Consumer] Processing message "
-                            f"{message_id} (attempt {attempt})"
-                        )
-
+                    async with self._semaphore:
                         await self.process_message(message_id, action, payload)
 
                         await self.redis_manager.xack(
@@ -276,72 +292,68 @@ class BaseRedisConsumer:
                             message_id,
                         )
 
-                        logger.debug(
-                            f"[Consumer] Message {message_id} ACKed successfully."
-                        )
-                        return
+                    logger.debug(f"[Consumer] Message {message_id} ACKed successfully.")
+                    return
 
-                    except NonRetryableError as non_retryable_error:
-                        last_error = str(non_retryable_error)
-                        skipped_retries = True
+                except NonRetryableError as non_retryable_error:
+                    last_error = str(non_retryable_error)
+                    skipped_retries = True
 
-                        logger.error(
-                            f"[Consumer] Non-retryable error processing {message_id}: "
-                            f"{last_error}. Skipping remaining retries."
-                        )
-                        break
+                    logger.error(
+                        f"[Consumer] Non-retryable error processing {message_id}: "
+                        f"{last_error}. Skipping remaining retries."
+                    )
+                    break
 
-                    except Exception as processing_error:
-                        last_error = type(processing_error).__name__
+                except Exception as processing_error:
+                    last_error = type(processing_error).__name__
 
-                        logger.error(
-                            f"[Consumer] Error processing {message_id} "
-                            f"(attempt {attempt}/{self.max_retries}): {last_error}"
-                        )
+                    logger.error(
+                        f"[Consumer] Error processing {message_id} "
+                        f"(attempt {attempt}/{self.max_retries}): {last_error}"
+                    )
 
-                        if attempt < self.max_retries:
-                            await asyncio.sleep(self.retry_delay)
+                    if attempt < self.max_retries:
+                        await asyncio.sleep(self.retry_delay)
 
-                # Max retries exceeded OR non-retryable error -> DLQ
-                logger.error(
-                    f"[Consumer] {'Non-retryable error' if skipped_retries else 'Max retries exceeded'} "
-                    f"for {message_id}. Sending to DLQ."
-                )
+            # Max retries exceeded OR non-retryable error -> DLQ
+            logger.error(
+                f"[Consumer] {'Non-retryable error' if skipped_retries else 'Max retries exceeded'} "
+                f"for {message_id}. Sending to DLQ."
+            )
 
-                await self._send_to_dlq(
-                    message_id=message_id,
-                    raw_payload=normalized_payload,
-                    error_msg=last_error,
-                )
+            await self._send_to_dlq(
+                message_id=message_id,
+                raw_payload=normalized_payload,
+                error_msg=last_error,
+            )
 
+            await self.redis_manager.xack(
+                self.stream_name,
+                self.group_name,
+                message_id,
+            )
+
+        except Exception as fatal_error:
+            logger.error(
+                f"[Consumer] Fatal handler error for {message_id}: "
+                f"{type(fatal_error).__name__}"
+            )
+
+            # Emergency ACK to prevent infinite poison loops
+            try:
                 await self.redis_manager.xack(
                     self.stream_name,
                     self.group_name,
                     message_id,
                 )
 
-            except Exception as fatal_error:
-                logger.error(
-                    f"[Consumer] Fatal handler error for {message_id}: "
-                    f"{type(fatal_error).__name__}"
+                logger.critical(f"[Consumer] Emergency ACK applied for {message_id}.")
+
+            except Exception as ack_error:
+                logger.critical(
+                    f"[Consumer] Emergency ACK FAILED for {message_id}: {type(ack_error).__name__}"
                 )
-
-                # Emergency ACK to prevent infinite poison loops
-                try:
-                    await self.redis_manager.xack(
-                        self.stream_name,
-                        self.group_name,
-                        message_id,
-                    )
-
-                    logger.critical(
-                        f"[Consumer] Emergency ACK applied for {message_id}."
-                    )
-
-                except Exception as ack_error:
-                    logger.critical(
-                        f"[Consumer] Emergency ACK FAILED for {message_id}: {type(ack_error).__name__}"
-                    )
 
     async def run(self):
 
@@ -355,6 +367,8 @@ class BaseRedisConsumer:
             f"listening to {self.stream_name}..."
         )
 
+        failures = 0  # reads that failed IN A ROW
+
         while self._is_running:
             try:
                 response = await self.redis_manager.xreadgroup(
@@ -364,6 +378,7 @@ class BaseRedisConsumer:
                     count=self.batch_size,
                     block=self.block_ms,
                 )
+                failures = 0
 
                 if not response:
                     continue
@@ -386,14 +401,32 @@ class BaseRedisConsumer:
                 logger.info(f"[Consumer] {self.consumer_name} stopping gracefully...")
 
                 self._is_running = False
-                break
+                # The task ends as cancelled, so whoever cancelled it can tell
+                # (swallowing the cancellation made it look like a normal end).
+                raise
 
             except Exception as loop_error:
-                logger.exception(
-                    f"[Consumer] Critical loop error: {loop_error}. Retrying in 5s..."
+                failures += 1
+                give_up = bool(self.max_loop_failures) and (
+                    failures >= self.max_loop_failures
+                )
+                delay = min(
+                    self.loop_error_delay * 2 ** (failures - 1),
+                    self.loop_error_max_delay,
+                )
+                # Only the type: the text of an error can hold values.
+                logger.error(
+                    f"[Consumer] Loop error {type(loop_error).__name__} "
+                    f"({failures} in a row"
+                    + (", giving up" if give_up else f", retrying in {delay:g}s")
+                    + ")"
                 )
 
-                await asyncio.sleep(5)
+                if give_up:
+                    self._is_running = False
+                    raise
+
+                await asyncio.sleep(delay)
 
     def stop(self):
         """
