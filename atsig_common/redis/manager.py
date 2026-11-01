@@ -1,21 +1,17 @@
-import asyncio
 import json
-from typing import Any, Optional
+from typing import Any
 
 from redis.asyncio import Redis
 
 
 class RedisManager:
     """
-    A Singleton wrapper for managing an asynchronous Redis connection.
+    A wrapper for managing an asynchronous Redis connection.
 
-    This class ensures that only one instance of the manager exists (optional logic implementation)
-    and provides convenient helper methods for common Redis operations like JSON
-    serialization and hash manipulation.
+    Each service creates one instance (`core/redis.py`) and shares it. It provides
+    convenient helper methods for common Redis operations like JSON serialization
+    and hash manipulation, and forwards every other Redis command to the client.
     """
-
-    _instance: Optional["RedisManager"] = None
-    _lock = asyncio.Lock()
 
     def __init__(self, host: str, port: int, password: str | None = None, db: int = 0):
         """
@@ -24,7 +20,7 @@ class RedisManager:
         Args:
             host (str): Redis server hostname.
             port (int): Redis server port.
-            password (Optional[str]): Connection password if required. Defaults to None.
+            password (str | None): Connection password if required. Defaults to None.
             db (int): Database index to use. Defaults to 0.
         """
         self._redis: Redis | None = None
