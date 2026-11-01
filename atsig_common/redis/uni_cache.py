@@ -133,7 +133,9 @@ class UniCache:
                 dep_id = dep["id"]
                 departments[dep_id] = dep
                 # Cache each department
-                await self.redis.set_json(self.DEPT_KEY.format(dep_id), dep)
+                await self.redis.set_json(
+                    self.DEPT_KEY.format(dep_id), dep, expire=self.CACHE_TTL
+                )
 
             # Update Redis hash map for department → university
             await self.update_department_university_map(api_departments)
@@ -166,7 +168,7 @@ class UniCache:
         department_map = {int(dep["id"]): dep for dep in school_departments}
 
         # Cache the dict
-        await self.redis.set_json(cache_key, department_map)
+        await self.redis.set_json(cache_key, department_map, expire=self.CACHE_TTL)
         logger.info(
             f"[UniCache] Successfully cached {len(department_map)} departments for school:{school_id}"
         )
