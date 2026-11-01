@@ -1,3 +1,4 @@
+import inspect
 from urllib.parse import quote
 
 import httpx
@@ -61,7 +62,8 @@ class BaseAPI:
         Provides authentication-specific headers.
 
         Subclasses should override this method to inject Bearer tokens
-        or API keys dynamically.
+        or API keys dynamically. It may be a plain method or a coroutine
+        (`async def`), for a token that has to be fetched without blocking.
 
         Returns:
             dict: A dictionary of authentication headers.
@@ -92,10 +94,14 @@ class BaseAPI:
         # 1. Global Default Headers (provided at __init__)
         # 2. Authentication Headers (provided by subclass logic)
         # 3. Request-specific headers (provided as arguments to the method)
+        auth_headers = self._get_auth_headers()
+        if inspect.isawaitable(auth_headers):
+            auth_headers = await auth_headers
+
         request_headers = {
             **self._correlation_headers(),
             **self.default_headers,
-            **self._get_auth_headers(),
+            **auth_headers,
             **kwargs.pop("headers", {}),
         }
 

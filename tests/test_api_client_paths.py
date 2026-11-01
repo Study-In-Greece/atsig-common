@@ -10,6 +10,9 @@ class FakeTokenManager:
     def get_token(self):
         return "service-token"
 
+    async def aget_token(self):
+        return "service-token"
+
 
 class FakeHttpManager:
     """Replaces HttpClientManager: every request is answered by `handler`."""

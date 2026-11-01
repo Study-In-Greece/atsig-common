@@ -13,8 +13,8 @@ class UsersAPI(BaseAPI):
         self.token_manager = token_manager
         super().__init__(base_url=base_url, http_manager=http_manager)
 
-    def _get_auth_headers(self):
-        token = self.token_manager.get_token()
+    async def _get_auth_headers(self):
+        token = await self.token_manager.aget_token()
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
