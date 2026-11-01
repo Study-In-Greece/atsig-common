@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 import uuid
 from typing import Any
 
@@ -28,7 +29,8 @@ class BaseRedisConsumer:
     - Retry Strategy
     - Dead Letter Queue
     - Graceful Shutdown
-    - Emergency ACK Policy
+    - Reclaim of the messages that a dead consumer left pending (XAUTOCLAIM), with a
+      limit of deliveries, after which a message goes to the DLQ
     """
 
     def __init__(
@@ -47,12 +49,21 @@ class BaseRedisConsumer:
         max_loop_failures: int = 20,
         loop_error_delay: float = 5,
         loop_error_max_delay: float = 60,
+        consumer_name: str | None = None,
+        reclaim_idle_ms: int = 120_000,
+        reclaim_interval_s: float = 60,
+        max_deliveries: int = 5,
     ):
         self.redis_manager = redis_manager
         self.stream_name = stream_name
         self.group_name = group_name
 
-        self.consumer_name = f"{consumer_prefix}_{uuid.uuid4().hex[:6]}"
+        # A random name per start by default, so two copies of a worker never share
+        # one. Give a fixed name (e.g. from the hostname) to keep the same consumer
+        # across restarts instead of leaving a new dead name in the group each time.
+        self.consumer_name = (
+            consumer_name or f"{consumer_prefix}_{uuid.uuid4().hex[:6]}"
+        )
         self.dlq_name = f"{stream_name}_dlq"
 
         self.block_ms = block_ms
@@ -80,6 +91,19 @@ class BaseRedisConsumer:
         self.max_loop_failures = max_loop_failures
         self.loop_error_delay = loop_error_delay
         self.loop_error_max_delay = loop_error_max_delay
+
+        # A message that was delivered and never ACKed (the consumer died while
+        # handling it, or the DLQ could not be written) stays PENDING. Every
+        # `reclaim_interval_s` seconds, and at start, this consumer takes over the
+        # pending messages that have been idle for `reclaim_idle_ms`. That must be
+        # longer than the longest time one message can take to handle, or a slow
+        # message would be handled twice at once (handlers are idempotent anyway).
+        # A message that was already delivered `max_deliveries` times goes to the DLQ
+        # instead of being handled again: this stops a message that kills the process
+        # from looping for ever.
+        self.reclaim_idle_ms = reclaim_idle_ms
+        self.reclaim_interval_s = reclaim_interval_s
+        self.max_deliveries = max_deliveries
 
         self._is_running = False
         self._semaphore = asyncio.Semaphore(concurrency)
@@ -119,6 +143,11 @@ class BaseRedisConsumer:
     ):
         """
         Send failed message to Dead Letter Queue.
+
+        Raises:
+            Exception: when the entry could not be written. The caller must then NOT
+                ACK the message: it stays pending, and is handled again after
+                `reclaim_idle_ms`. (It used to be ACKed here, which lost it.)
         """
 
         try:
@@ -140,24 +169,10 @@ class BaseRedisConsumer:
         except Exception as dlq_err:
             logger.critical(
                 f"[Consumer] FAILED TO WRITE TO DLQ for message {message_id}. "
-                f"Emergency ACK will be applied. Error: {type(dlq_err).__name__}"
+                f"It stays pending and will be retried. "
+                f"Error: {type(dlq_err).__name__}"
             )
-
-            # Emergency ACK policy to prevent poison message loops
-            try:
-                await self.redis_manager.xack(
-                    self.stream_name,
-                    self.group_name,
-                    message_id,
-                )
-
-                logger.critical(f"[Consumer] Emergency ACK applied for {message_id}.")
-
-            except Exception as ack_err:
-                logger.critical(
-                    f"[Consumer] Emergency ACK FAILED for {message_id}. "
-                    f"Manual intervention required. Error: {type(ack_err).__name__}"
-                )
+            raise
 
     async def process_message(
         self,
@@ -233,6 +248,92 @@ class BaseRedisConsumer:
             self.group_name,
             message_id,
         )
+
+    async def _delivery_count(self, message_id: str) -> int | None:
+        """How many times Redis has delivered the message (None when it can not tell)."""
+        try:
+            rows = await self.redis_manager.xpending_range(
+                self.stream_name,
+                self.group_name,
+                min=message_id,
+                max=message_id,
+                count=1,
+            )
+            return int(rows[0]["times_delivered"]) if rows else None
+        except Exception:
+            return None
+
+    async def _dead_letter_reclaimed(
+        self, message_id: str, fields: dict[str, Any], deliveries: int
+    ):
+        """A message that was delivered too many times: to the DLQ, then ACK."""
+        logger.error(
+            f"[Consumer] Message {message_id} was delivered {deliveries} times "
+            f"(limit {self.max_deliveries}). Sending to DLQ."
+        )
+        await self._send_to_dlq(
+            message_id=message_id,
+            raw_payload={str(k): v for k, v in fields.items()},
+            error_msg=f"Delivery limit reached ({deliveries} deliveries)",
+        )
+        await self.redis_manager.xack(self.stream_name, self.group_name, message_id)
+
+    async def _handle_reclaimed(self, claimed: list[tuple[str, dict[str, Any] | None]]):
+        tasks = []
+        for message_id, fields in claimed:
+            if fields is None:
+                # The entry was trimmed from the stream (MAXLEN) while it was pending:
+                # there is nothing left to handle.
+                await self.redis_manager.xack(
+                    self.stream_name, self.group_name, message_id
+                )
+                continue
+
+            deliveries = await self._delivery_count(message_id)
+            if deliveries is not None and deliveries > self.max_deliveries:
+                tasks.append(
+                    self._dead_letter_reclaimed(message_id, fields, deliveries)
+                )
+            else:
+                tasks.append(self._handle_message(message_id, fields))
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _reclaim_pending(self) -> int:
+        """
+        Takes over the messages that were delivered, never ACKed, and have been idle
+        for `reclaim_idle_ms` (a consumer died, or the DLQ was down), and handles them.
+        Returns how many it took.
+        """
+        reclaimed = 0
+        start_id = "0-0"
+
+        while self._is_running:
+            result = await self.redis_manager.xautoclaim(
+                self.stream_name,
+                self.group_name,
+                self.consumer_name,
+                min_idle_time=self.reclaim_idle_ms,
+                start_id=start_id,
+                count=self.batch_size,
+            )
+            next_id, claimed = result[0], result[1]
+
+            if claimed:
+                reclaimed += len(claimed)
+                logger.warning(
+                    f"[Consumer] Reclaimed {len(claimed)} pending message(s) of "
+                    f"'{self.stream_name}'."
+                )
+                await self._handle_reclaimed(claimed)
+
+            # "0-0" is the end of the scan; also stop if the cursor does not move
+            if next_id in ("0-0", b"0-0") or next_id == start_id:
+                break
+            start_id = next_id
+
+        return reclaimed
 
     async def _handle_message(
         self,
@@ -335,25 +436,13 @@ class BaseRedisConsumer:
             )
 
         except Exception as fatal_error:
+            # Something went wrong around the handling itself (Redis, the DLQ). The
+            # message is NOT ACKed: it stays pending and is reclaimed, and after
+            # `max_deliveries` deliveries it goes to the DLQ.
             logger.error(
-                f"[Consumer] Fatal handler error for {message_id}: "
-                f"{type(fatal_error).__name__}"
+                f"[Consumer] Handler error for {message_id}, the message stays "
+                f"pending: {type(fatal_error).__name__}"
             )
-
-            # Emergency ACK to prevent infinite poison loops
-            try:
-                await self.redis_manager.xack(
-                    self.stream_name,
-                    self.group_name,
-                    message_id,
-                )
-
-                logger.critical(f"[Consumer] Emergency ACK applied for {message_id}.")
-
-            except Exception as ack_error:
-                logger.critical(
-                    f"[Consumer] Emergency ACK FAILED for {message_id}: {type(ack_error).__name__}"
-                )
 
     async def run(self):
 
@@ -368,9 +457,19 @@ class BaseRedisConsumer:
         )
 
         failures = 0  # reads that failed IN A ROW
+        last_reclaim: float | None = None  # monotonic time of the last reclaim
 
         while self._is_running:
             try:
+                # First thing at start, and then every `reclaim_interval_s`
+                now = time.monotonic()
+                if (
+                    last_reclaim is None
+                    or now - last_reclaim >= self.reclaim_interval_s
+                ):
+                    await self._reclaim_pending()
+                    last_reclaim = time.monotonic()
+
                 response = await self.redis_manager.xreadgroup(
                     groupname=self.group_name,
                     consumername=self.consumer_name,
