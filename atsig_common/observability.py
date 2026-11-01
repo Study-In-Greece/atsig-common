@@ -1,0 +1,103 @@
+"""
+What every API did by hand in its main.py: logging, Sentry/GlitchTip, exception
+handlers, request-context middleware, CORS and the debug route.
+
+    init_observability(settings, "applications-api")   # before the app is created
+
+    app = FastAPI(...)
+    app.add_middleware(MultipartBodyLimitMiddleware, ...)   # innermost, if used
+    setup_app(app, settings)                                 # logging, CORS: outer
+"""
+
+import logging
+import logging.config
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
+
+import sentry_sdk
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sentry_sdk.integrations.logging import LoggingIntegration
+
+from .fastapi_utils import setup_exception_handlers
+from .logger.config import get_logging_config
+from .logger.middleware import LoggingContextMiddleware
+
+
+def scrub_sentry_event(event: dict[str, Any], hint: Any = None) -> dict[str, Any]:
+    """
+    `before_send` hook: the URL of the request is replaced by its route template
+    (`/references/{token}`) and the query string is dropped. Some paths carry a
+    secret token, and Sentry would keep the real URL of every error.
+    """
+    request = event.get("request")
+    if request:
+        transaction = event.get("transaction") or ""
+        url = request.get("url")
+        if url and transaction.startswith("/"):
+            parts = urlsplit(url)
+            request["url"] = urlunsplit(
+                (parts.scheme, parts.netloc, transaction, "", "")
+            )
+        request.pop("query_string", None)
+    return event
+
+
+def init_observability(
+    settings: Any,
+    service_name: str,
+    *,
+    traces_sample_rate: float = 0.1,
+) -> bool:
+    """
+    Sets up the JSON logging, and Sentry/GlitchTip in production when a DSN is set.
+
+    Returns:
+        True when Sentry was started.
+    """
+    logging.config.dictConfig(get_logging_config(service_name))
+
+    if settings.ENVIRONMENT != "production" or not settings.GLITCHTIP_DSN:
+        return False
+
+    sentry_sdk.init(
+        dsn=settings.GLITCHTIP_DSN,
+        environment=settings.ENVIRONMENT,
+        integrations=[
+            LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)
+        ],
+        traces_sample_rate=traces_sample_rate,
+        before_send=scrub_sentry_event,
+    )
+    return True
+
+
+def setup_app(app: FastAPI, settings: Any, *, debug_route: bool | None = None) -> None:
+    """
+    Exception handlers, the request-context middleware and CORS.
+
+    `add_middleware` wraps what was added before, so the middleware added last is
+    the outermost. Add a body limit before calling this, so that its 400 still
+    goes out through the logging and CORS middleware.
+
+    Args:
+        debug_route: Adds `GET /debug-error`, which raises an error, for testing the
+            error reports. By default only when the environment is not production.
+    """
+    setup_exception_handlers(app)
+    app.add_middleware(LoggingContextMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    if debug_route is None:
+        debug_route = settings.ENVIRONMENT != "production"
+    if debug_route:
+
+        @app.get("/debug-error", include_in_schema=False)
+        async def debug_error():
+            raise RuntimeError("Debug error, raised on purpose by /debug-error")
