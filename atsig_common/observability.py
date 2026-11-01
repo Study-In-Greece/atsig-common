@@ -55,7 +55,12 @@ def init_observability(
     Returns:
         True when Sentry was started.
     """
-    logging.config.dictConfig(get_logging_config(service_name))
+    logging.config.dictConfig(
+        get_logging_config(
+            service_name,
+            include_user_email=getattr(settings, "LOG_USER_EMAIL", True),
+        )
+    )
 
     if settings.ENVIRONMENT != "production" or not settings.GLITCHTIP_DSN:
         return False
@@ -85,7 +90,10 @@ def setup_app(app: FastAPI, settings: Any, *, debug_route: bool | None = None) -
             error reports. By default only when the environment is not production.
     """
     setup_exception_handlers(app)
-    app.add_middleware(LoggingContextMiddleware)
+    app.add_middleware(
+        LoggingContextMiddleware,
+        include_user_email=getattr(settings, "LOG_USER_EMAIL", True),
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,

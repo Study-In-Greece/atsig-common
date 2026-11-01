@@ -37,6 +37,11 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
        error logs contain the correct Request ID and User Email.
     """
 
+    def __init__(self, app, include_user_email: bool = True):
+        super().__init__(app)
+        # When False the email of the user is neither logged nor sent to Sentry
+        self.include_user_email = include_user_email
+
     async def dispatch(self, request: Request, call_next):
         # 1. Handle Correlation ID (Request ID)
         # Use provided header if behind a proxy, otherwise generate a new short UUID
@@ -59,7 +64,7 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
                 payload = jwt.decode(token, options={"verify_signature": False})
 
                 user_id = payload.get("sub")
-                user_email = payload.get("email")
+                user_email = payload.get("email") if self.include_user_email else None
 
                 # Inject User info into Sentry/GlitchTip scope
                 sentry_sdk.set_user({"id": user_id, "email": user_email})
