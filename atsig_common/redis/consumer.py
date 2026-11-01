@@ -41,6 +41,7 @@ class BaseRedisConsumer:
         max_retries: int = 3,
         retry_delay: int = 2,
         concurrency: int = 10,
+        group_start_id: str = "0",
     ):
         self.redis_manager = redis_manager
         self.stream_name = stream_name
@@ -55,19 +56,24 @@ class BaseRedisConsumer:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
+        # Where a NEW consumer group starts reading. "0" is the beginning of the
+        # stream, so events sent before the group existed (a new environment, a new
+        # stream) are not lost. "$" would read only what arrives afterwards.
+        # An existing group keeps its own position and ignores this.
+        self.group_start_id = group_start_id
+
         self._is_running = False
         self._semaphore = asyncio.Semaphore(concurrency)
 
     async def _ensure_consumer_group(self):
         """
-        Create consumer group if it does not exist.
-        '$' means consume only new messages.
+        Create consumer group if it does not exist, starting at `group_start_id`.
         """
         try:
             await self.redis_manager.xgroup_create(
                 name=self.stream_name,
                 groupname=self.group_name,
-                id="$",
+                id=self.group_start_id,
                 mkstream=True,
             )
 
