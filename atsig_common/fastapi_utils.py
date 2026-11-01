@@ -12,6 +12,7 @@ from .exceptions import (
     NotFoundError,
     ServiceUnavailableError,
     UnauthorizedError,
+    UpstreamError,
 )
 
 logger = logging.getLogger("atsig-common")
@@ -75,4 +76,10 @@ def setup_exception_handlers(app: FastAPI):
             status_code=503,
             content={"detail": exc.message},
             headers={"Retry-After": "5"},
+        )
+
+    @app.exception_handler(UpstreamError)
+    async def upstream_error_handler(_, exc: UpstreamError):
+        return JSONResponse(
+            status_code=exc.status_code, content={"detail": exc.message}
         )

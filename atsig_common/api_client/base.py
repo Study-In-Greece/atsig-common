@@ -1,18 +1,19 @@
 import inspect
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
 from ..exceptions import (
-    AtsigError,
     BadRequestError,
     ConflictError,
-    ForbiddenError,
     NotFoundError,
-    UnauthorizedError,
+    UpstreamError,
 )
+from ..logger.config import get_logger
 from ..logger.context import current_request_id
 from .http_manager import HttpClientManager
+
+logger = get_logger("atsig_common.api_client")
 
 
 class BaseAPI:
@@ -129,22 +130,35 @@ class BaseAPI:
             except Exception:
                 detail = response.text
 
+            # What the user can fix or must know: the answer of the other service is
+            # passed on as it is.
             if response.status_code == 404:
                 raise NotFoundError(detail)
-            elif response.status_code == 403:
-                raise ForbiddenError(detail)
-            elif response.status_code == 401:
-                raise UnauthorizedError(detail)
             elif response.status_code == 409:
                 raise ConflictError(detail)
             elif response.status_code == 400:
                 raise BadRequestError(detail)
-            else:
-                raise AtsigError(f"Remote API Error ({response.status_code}): {detail}")
+
+            # Anything else (the 401/403 for the token of THIS service, a 422 for a
+            # request this service built wrong, every 5xx) is not the fault of the
+            # user. Answering it with the same status would tell the user "log in
+            # again" for a problem between two services, and the body of the other
+            # service would reach the user. It is a 502, and the status goes to the log.
+            logger.error(
+                f"[API client] {method} {urlsplit(url).path} answered "
+                f"{response.status_code}"
+            )
+            raise UpstreamError()
 
         except httpx.RequestError as e:
-            # Σφάλματα δικτύου (timeout, DNS, κλπ)
-            raise AtsigError(f"Network error while calling {url}: {str(e)}") from e
+            # Network errors (timeout, DNS, refused connection). The text of the error
+            # holds the internal URL, so only its type is logged.
+            logger.error(
+                f"[API client] {method} {urlsplit(url).path} failed: {type(e).__name__}"
+            )
+            raise UpstreamError(
+                status_code=504 if isinstance(e, httpx.TimeoutException) else 502
+            ) from None
 
     async def get(self, endpoint: str, params: dict = None, **kwargs):
         """Executes an asynchronous GET request returning parsed data."""
