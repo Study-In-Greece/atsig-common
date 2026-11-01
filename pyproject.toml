@@ -73,6 +73,21 @@ select = [
 ignore = [
     "E501",   # long docstring lines — follow-up cleanup commit, tracked separately
     "UP046",  # Generic[T] -> PEP 695 refactor — needs its own PR, touches shared base classes
+    "UP047",  # same for generic functions (the services ignore it too)
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependencies in argument defaults are the intended style (as in the services)
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Security",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.File",
+    "fastapi.Form",
 ]
 
 [tool.ruff.format]
