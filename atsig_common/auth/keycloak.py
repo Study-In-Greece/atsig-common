@@ -2,6 +2,8 @@ from typing import Protocol
 
 from keycloak import KeycloakOpenID
 
+from .decode import TokenVerifier, register_verifier
+
 
 class KeycloakSettingsProto(Protocol):
     """
@@ -40,10 +42,21 @@ def create_keycloak_client(settings: KeycloakSettingsProto) -> KeycloakOpenID:
     Returns:
         KeycloakOpenID: A configured instance of the Keycloak client.
     """
-    return KeycloakOpenID(
+    client = KeycloakOpenID(
         server_url=settings.AUTHORIZATION_URL,
         client_id=settings.KEYCLOAK_CLIENT_ID,
         realm_name=settings.KEYCLOAK_REALM,
         client_secret_key=settings.KEYCLOAK_CLIENT_SECRET,
         verify=settings.KEYCLOAK_VERIFY_SSL,
     )
+    # `decode_token(client, token)` verifies with this one: the keys of the realm are
+    # cached, and the optional issuer/audience checks come from the settings.
+    register_verifier(
+        client,
+        TokenVerifier(
+            client,
+            issuer=getattr(settings, "KEYCLOAK_EXPECTED_ISSUER", None),
+            audience=getattr(settings, "KEYCLOAK_EXPECTED_AUDIENCE", None),
+        ),
+    )
+    return client

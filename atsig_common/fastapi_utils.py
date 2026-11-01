@@ -10,6 +10,7 @@ from .exceptions import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
+    ServiceUnavailableError,
     UnauthorizedError,
 )
 
@@ -66,4 +67,12 @@ def setup_exception_handlers(app: FastAPI):
         return JSONResponse(
             status_code=409,
             content={"detail": exc.message},
+        )
+
+    @app.exception_handler(ServiceUnavailableError)
+    async def service_unavailable_handler(_, exc: ServiceUnavailableError):
+        return JSONResponse(
+            status_code=503,
+            content={"detail": exc.message},
+            headers={"Retry-After": "5"},
         )

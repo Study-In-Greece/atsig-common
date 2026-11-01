@@ -29,7 +29,7 @@ from keycloak import KeycloakOpenID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .context import BaseAuthContext
-from .decode import decode_token
+from .decode import adecode_token
 from .groups import validate_user_groups
 
 ContextT = TypeVar("ContextT", bound=BaseAuthContext)
@@ -100,7 +100,7 @@ def make_get_token_payload(
         if cached is not None and cached[0] == token:
             return cached[1]
 
-        payload = decode_token(keycloak_client, token)
+        payload = await adecode_token(keycloak_client, token)
         request.state.token_payload = (token, payload)
         return payload
 
@@ -176,7 +176,7 @@ def make_get_optional_auth_context(
         if not token:
             return None
         try:
-            payload = decode_token(keycloak_client, token)
+            payload = await adecode_token(keycloak_client, token)
             context = build_auth_context(
                 payload, context_cls=context_cls, strict=strict
             )

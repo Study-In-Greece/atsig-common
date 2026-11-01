@@ -46,6 +46,13 @@ class BaseAtsigSettings(BaseSettings):
     KEYCLOAK_CLIENT_SECRET: str
     AUTHORIZATION_URL: str
     KEYCLOAK_VERIFY_SSL: bool = True
+    # Optional checks of the access token, OFF by default (None). Turn them on only
+    # after trying them in a dev realm: a wrong value rejects every user.
+    # Issuer: the public address of the realm, e.g. https://sso.example.gr/realms/x
+    KEYCLOAK_EXPECTED_ISSUER: str | None = None
+    # Audience: needs an audience mapper on the Keycloak client, otherwise tokens
+    # carry `aud: account`.
+    KEYCLOAK_EXPECTED_AUDIENCE: str | None = None
 
     # --- 4. REDIS (Optional for shared base) ---
     REDIS_SERVER: str | None = None

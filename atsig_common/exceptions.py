@@ -24,6 +24,13 @@ class ConflictError(AtsigError):
     pass
 
 
+class ServiceUnavailableError(AtsigError):
+    """
+    A service this one depends on can not be reached right now (503). The message
+    goes to the client, so it must not hold internal details.
+    """
+
+
 class NonRetryableError(Exception):
     """
     Raise this when a failure is deterministic - retrying won't help
