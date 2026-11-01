@@ -12,6 +12,18 @@ from atsig_common.logger.context import request_id_var, user_email_var, user_id_
 logger = logging.getLogger(__name__)
 
 
+def loggable_path(request: Request) -> str:
+    """
+    The path to write in the logs. A matched route is logged by its template
+    (`/references/{token}`), never by the real path: some paths carry a secret
+    token that works as a credential. The route is known once the request has been
+    routed, so this is called after the endpoint ran. A request that matched no
+    route has nothing to protect, only its (shortened) path is logged.
+    """
+    template = getattr(request.scope.get("route"), "path", None)
+    return template or request.url.path[:200]
+
+
 class LoggingContextMiddleware(BaseHTTPMiddleware):
     """
     Middleware that populates logging context variables for each HTTP request.
@@ -72,7 +84,7 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
             # 4. Write our custom, context-aware access log
             client_ip = request.client.host if request.client else "unknown"
             logger.info(
-                f'{client_ip} - "{request.method} {request.url.path}" '
+                f'{client_ip} - "{request.method} {loggable_path(request)}" '
                 f"{response.status_code} ({process_time:.3f}s)"
             )
 
@@ -84,7 +96,7 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
             # 5. Catch unhandled exceptions to log them WITH context before the finally block clears it.
             # We use logger.exception to automatically include the full stack trace.
             logger.exception(
-                f"Unhandled exception during {request.method} {request.url.path}"
+                f"Unhandled exception during {request.method} {loggable_path(request)}"
             )
 
             # Re-raise the exception so FastAPI can return a 500 response
