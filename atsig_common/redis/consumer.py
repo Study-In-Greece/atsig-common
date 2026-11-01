@@ -7,6 +7,7 @@ from redis.exceptions import ResponseError
 
 from ..exceptions import NonRetryableError
 from ..logger.config import get_logger
+from ..logger.context import is_valid_request_id, request_id_var
 from .manager import RedisManager
 
 logger = get_logger("atsig_common.redis.consumer")
@@ -191,6 +192,15 @@ class BaseRedisConsumer:
 
         return action, payload
 
+    def _request_id_of(self, raw_payload: dict[str, Any]) -> str | None:
+        """The request id the producer put in `meta`. A bad or missing `meta` is ignored."""
+        try:
+            meta = {self._decode(k): self._decode(v) for k, v in raw_payload.items()}
+            request_id = json.loads(meta.get("meta") or "{}")["request_id"]
+        except Exception:
+            return None
+        return request_id if is_valid_request_id(request_id) else None
+
     async def _reject_invalid_message(
         self, message_id: str, raw_payload: dict[str, Any], reason: str
     ):
@@ -217,9 +227,20 @@ class BaseRedisConsumer:
         raw_payload: dict[str, Any],
     ):
         """
-        Handle a single message lifecycle.
+        Handle a single message lifecycle, logging under the id of the request that
+        caused the event (or under the id of the entry, when it carries none).
         """
+        token = request_id_var.set(self._request_id_of(raw_payload) or message_id)
+        try:
+            await self._handle_entry(message_id, raw_payload)
+        finally:
+            request_id_var.reset(token)
 
+    async def _handle_entry(
+        self,
+        message_id: str,
+        raw_payload: dict[str, Any],
+    ):
         async with self._semaphore:
             try:
                 try:

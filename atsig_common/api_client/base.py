@@ -10,6 +10,7 @@ from ..exceptions import (
     NotFoundError,
     UnauthorizedError,
 )
+from ..logger.context import current_request_id
 from .http_manager import HttpClientManager
 
 
@@ -49,6 +50,12 @@ class BaseAPI:
         """
         return quote(str(value), safe="")
 
+    @staticmethod
+    def _correlation_headers() -> dict:
+        """The id of the request being served, so a call can be followed across services."""
+        request_id = current_request_id()
+        return {"X-Request-ID": request_id} if request_id else {}
+
     def _get_auth_headers(self) -> dict:
         """
         Provides authentication-specific headers.
@@ -86,6 +93,7 @@ class BaseAPI:
         # 2. Authentication Headers (provided by subclass logic)
         # 3. Request-specific headers (provided as arguments to the method)
         request_headers = {
+            **self._correlation_headers(),
             **self.default_headers,
             **self._get_auth_headers(),
             **kwargs.pop("headers", {}),

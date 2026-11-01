@@ -5,6 +5,7 @@ from typing import Any
 from redis.client import Pipeline
 
 from ..logger.config import get_logger
+from ..logger.context import current_request_id
 from .manager import RedisManager
 
 logger = get_logger("atsig_common.redis.producer")
@@ -59,6 +60,12 @@ class EventProducer:
                 f"{type(e).__name__}"
             )
             raise
+
+        # The id of the request that causes the event travels beside the payload, so a
+        # consumer can log under the same id. Old consumers ignore the extra field.
+        request_id = current_request_id()
+        if request_id:
+            stream_data["meta"] = json.dumps({"request_id": request_id})
 
         target = pipe if pipe is not None else self.redis_manager
 

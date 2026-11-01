@@ -1,5 +1,4 @@
 import logging
-import re
 import time
 import uuid
 
@@ -8,20 +7,19 @@ import sentry_sdk
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from atsig_common.logger.context import request_id_var, user_email_var, user_id_var
+from atsig_common.logger.context import (
+    is_valid_request_id,
+    request_id_var,
+    user_email_var,
+    user_id_var,
+)
 
 logger = logging.getLogger(__name__)
 
 
-# The id the client may send in X-Request-ID: short and made of safe characters only.
-# Anything else is replaced by a generated id, so the client can not put arbitrary
-# text in our logs, our Sentry events and the response header.
-REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,64}")
-
-
 def resolve_request_id(incoming: str | None) -> str:
     """The id of the request: the one sent by the client/proxy when it is valid."""
-    if incoming and REQUEST_ID_PATTERN.fullmatch(incoming):
+    if is_valid_request_id(incoming):
         return incoming
     return uuid.uuid4().hex[:8]
 

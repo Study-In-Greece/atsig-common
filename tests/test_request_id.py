@@ -58,3 +58,7 @@ def test_an_invalid_id_is_not_echoed_back():
 
     assert "<script>" not in response.headers["X-Request-ID"]
     assert seen["request_id"] == response.headers["X-Request-ID"]
+
+
+def test_the_placeholder_of_no_request_is_not_a_valid_id():
+    assert resolve_request_id("-") != "-"
