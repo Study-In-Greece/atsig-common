@@ -12,6 +12,13 @@ from .manager import RedisManager
 logger = get_logger("atsig_common.redis.consumer")
 
 
+class InvalidMessageError(ValueError):
+    """
+    A stream entry is not a valid message envelope. Retrying cannot help, so the
+    entry goes straight to the DLQ. The text never holds values of the message.
+    """
+
+
 class BaseRedisConsumer:
     """
     Base Redis Stream Consumer with:
@@ -142,6 +149,51 @@ class BaseRedisConsumer:
 
         return value
 
+    @staticmethod
+    def _parse_envelope(normalized_payload: dict[str, Any]) -> tuple[str, dict]:
+        """
+        Splits a stream entry into (action, payload).
+
+        Raises:
+            InvalidMessageError: the entry has no action or data, or the data is
+                not a JSON object.
+        """
+        action = normalized_payload.get("action")
+        raw_data = normalized_payload.get("data")
+
+        if action is None or raw_data is None:
+            raise InvalidMessageError("missing 'action' or 'data'")
+
+        try:
+            payload = json.loads(raw_data)
+        except (TypeError, ValueError):
+            raise InvalidMessageError("'data' is not valid JSON") from None
+
+        if not isinstance(payload, dict):
+            raise InvalidMessageError("'data' is not a JSON object")
+
+        return action, payload
+
+    async def _reject_invalid_message(
+        self, message_id: str, raw_payload: dict[str, Any], reason: str
+    ):
+        """Sends an entry that is not a valid message to the DLQ, then ACKs it."""
+        logger.error(
+            f"[Consumer] Invalid message {message_id}: {reason}. Sending to DLQ."
+        )
+
+        await self._send_to_dlq(
+            message_id=message_id,
+            raw_payload={str(key): value for key, value in raw_payload.items()},
+            error_msg=f"Invalid message: {reason}",
+        )
+
+        await self.redis_manager.xack(
+            self.stream_name,
+            self.group_name,
+            message_id,
+        )
+
     async def _handle_message(
         self,
         message_id: str,
@@ -153,19 +205,19 @@ class BaseRedisConsumer:
 
         async with self._semaphore:
             try:
-                normalized_payload = {
-                    self._decode(k): self._decode(v) for k, v in raw_payload.items()
-                }
-
-                action = normalized_payload.get("action")
-                raw_data = normalized_payload.get("data")
-
-                if action is None or raw_data is None:
-                    raise ValueError(
-                        "Invalid message format: missing 'action' or 'data'"
+                try:
+                    normalized_payload = {
+                        self._decode(k): self._decode(v) for k, v in raw_payload.items()
+                    }
+                    action, payload = self._parse_envelope(normalized_payload)
+                except Exception as envelope_error:
+                    reason = (
+                        str(envelope_error)
+                        if isinstance(envelope_error, InvalidMessageError)
+                        else f"unreadable entry ({type(envelope_error).__name__})"
                     )
-
-                payload = json.loads(raw_data)
+                    await self._reject_invalid_message(message_id, raw_payload, reason)
+                    return
 
                 last_error = None
 
