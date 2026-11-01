@@ -4,14 +4,18 @@ Shared utilities package for the ATSIG (Study In Greece) microservices — `prog
 
 ## What's inside
 
-- **Auth** (`atsig_common.auth`) — Keycloak group-based RBAC (`GroupEnum`, `validate_user_groups`), `BaseAuthContext`/`BaseAccessPolicy` for service-specific extension, JWT decoding.
-- **Redis** (`atsig_common.redis`) — `RedisManager` connection wrapper, `EventProducer` for Redis Streams, `BaseRedisConsumer` (consumer groups, retries, Dead Letter Queue, graceful shutdown).
-- **Services** (`atsig_common.services`) — `CRUDBaseService`/`CRUDBaseAuthService` generic base classes for SQLAlchemy-backed services.
-- **Pagination** (`atsig_common.pagination`) — reusable query pagination helpers and response schemas.
-- **Email** (`atsig_common.email`) — async email client with template + bulk send support.
-- **API client** (`atsig_common.api_client`) — thin async HTTP client factory for service-to-service calls.
-- **Exceptions** (`atsig_common.exceptions`) — shared error types (`BadRequestError`, `NotFoundError`, `NonRetryableError`, …) used consistently across services.
-- **Logging / observability** (`atsig_common.logger`) — structured JSON logging, request-context middleware, Sentry integration.
+- **Auth** (`atsig_common.auth`) — Keycloak group-based RBAC (`GroupEnum`, `validate_user_groups`), `BaseAuthContext`/`BaseAccessPolicy`, token verification with cached signing keys (`decode_token`, `adecode_token`, `TokenVerifier`), and the shared FastAPI dependencies (`auth.dependencies`: the token is decoded once per request).
+- **Bootstrap** (`atsig_common.bootstrap`) — `build_core(settings)`: Keycloak, Redis, storage and API clients built from the settings, with a lifespan that starts and stops them in order.
+- **Observability** (`atsig_common.observability`, `atsig_common.logger`) — `init_observability` (JSON logging, Sentry), `setup_app` (handlers, request-context middleware, CORS, debug route outside production), request ids that travel with calls and events.
+- **Redis** (`atsig_common.redis`) — `RedisManager`, `EventProducer` (optional `maxlen`, retries, `emit_safe`), `BaseRedisConsumer` (consumer groups, retries, Dead Letter Queue, reclaim of pending messages, graceful shutdown), `UniCache`.
+- **Events** (`atsig_common.events`) — the events the services send each other, defined once (`ApplicantNameSync`, `UserSyncEvent`, `ProgrammeUpdateEvent`, ...) and the stream names.
+- **Files** (`atsig_common.files`, `atsig_common.middleware`) — upload type detection from the bytes, storage key checks, temporary files, and the multipart body limit middleware.
+- **Database** (`atsig_common.db`) — `create_db_engine` / `create_session_factory`, `IDMixin`, `TimestampMixin`.
+- **Services** (`atsig_common.services`) — `CRUDBaseService`/`CRUDBaseAuthService` generic base classes and the service dependency factory.
+- **Pagination** (`atsig_common.pagination`) — pagination helpers and response schemas (sorting is limited to mapped columns and hybrid properties).
+- **Email** (`atsig_common.email`) — email client with template + bulk send support (`asend_email` for async code).
+- **API client** (`atsig_common.api_client`) — async HTTP client factory for service-to-service calls (errors of the other service become `UpstreamError`, a 502).
+- **Exceptions** (`atsig_common.exceptions`) — shared error types used consistently across services.
 
 Installed as an optional-extras package — each service pulls in only what it needs, e.g.:
 
@@ -32,7 +36,15 @@ cd atsig-common
 uv sync --all-extras
 ```
 
-This creates a `.venv/` with every optional dependency group installed, plus dev tools (Ruff).
+This creates a `.venv/` with every optional dependency group installed, plus dev tools (Ruff, pytest).
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+The tests are pure logic: no database, no network, no real Redis (a `FakeRedis` in `tests/conftest.py` records the commands). Add a test with every fix.
 
 ## Linting & formatting
 
@@ -60,25 +72,25 @@ Configuration lives in `pyproject.toml` under `[tool.ruff]`, and mirrors the con
 3. Run `uv run pre-commit install` once after cloning, so Ruff runs
    automatically on every commit.
 4. Bump `version` in `pyproject.toml` following semver:
-   - **patch** (`0.5.0` → `0.5.1`) — bug fixes, no new public API.
-   - **minor** (`0.5.0` → `0.6.0`) — new public classes/functions, backward-compatible.
+   - **patch** (`0.6.0` → `0.6.1`) — bug fixes, no new public API.
+   - **minor** (`0.6.0` → `0.7.0`) — new public classes/functions, backward-compatible.
    - **major** (`0.x` → `1.0`, or `1.x` → `2.0`) — breaking changes to existing signatures/behavior.
 5. Open a PR against `main`.
 
 ## Releasing
 
 1. Merge the version-bump PR into `main`.
-2. Tag the release:
+2. Tag the release. Tags have no `v` prefix (`0.3.0`, `0.6.0`):
 ```bash
-   git tag v0.5.0
-   git push origin v0.5.0
+   git tag 0.6.0
+   git push origin 0.6.0
 ```
-3. Create the GitHub release from the tag (`gh release create v0.5.0 --generate-notes`, or via the GitHub UI).
-4. In each consuming service (`programmes-api`, `applications-api`, …), bump the pinned tag and refresh the lockfile:
+3. Create the GitHub release from the tag (`gh release create 0.6.0 --generate-notes`, or via the GitHub UI), with the section of `CHANGELOG.md` as notes.
+4. In each consuming service (`programmes-api`, `applications-api`, `profiles-api`, `uni-api`, `email-service`), bump the pinned tag in `pyproject.toml` (`...atsig-common.git@0.6.0`) and refresh the lockfile:
 ```bash
    uv lock --upgrade-package atsig-common
 ```
-   Commit the updated lockfile in that service's own PR.
+   Commit the updated lockfile in that service's own PR. Follow the "Upgrade notes" of the release in `CHANGELOG.md`.
 
 ## Notes on breaking changes
 

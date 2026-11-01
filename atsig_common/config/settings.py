@@ -3,6 +3,21 @@ from urllib.parse import quote
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _url_user(value: str) -> str:
+    """
+    A user name for a URL. Only what breaks the URL is escaped (`%` first), so a name
+    that works as it is stays exactly the same.
+    """
+    for char, escaped in (("%", "%25"), ("@", "%40"), (":", "%3A"), ("/", "%2F")):
+        value = value.replace(char, escaped)
+    return value
+
+
+def _url_password(value: str) -> str:
+    """A password for a URL: same rule, only `%` and `@` break it."""
+    return value.replace("%", "%25").replace("@", "%40")
+
+
 class BaseAtsigSettings(BaseSettings):
     # --- 1. GENERAL / MONITORING ---
     ENVIRONMENT: str = "development"
@@ -31,6 +46,13 @@ class BaseAtsigSettings(BaseSettings):
     KEYCLOAK_CLIENT_SECRET: str
     AUTHORIZATION_URL: str
     KEYCLOAK_VERIFY_SSL: bool = True
+    # Optional checks of the access token, OFF by default (None). Turn them on only
+    # after trying them in a dev realm: a wrong value rejects every user.
+    # Issuer: the public address of the realm, e.g. https://sso.example.gr/realms/x
+    KEYCLOAK_EXPECTED_ISSUER: str | None = None
+    # Audience: needs an audience mapper on the Keycloak client, otherwise tokens
+    # carry `aud: account`.
+    KEYCLOAK_EXPECTED_AUDIENCE: str | None = None
 
     # --- 4. REDIS (Optional for shared base) ---
     REDIS_SERVER: str | None = None
@@ -52,10 +74,26 @@ class BaseAtsigSettings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        """
+        The URL of the database for SQLAlchemy. A user name or password with a
+        character that has a meaning in a URL (`@`, `%`) is escaped; the engine
+        decodes it back. Credentials that need no escaping are unchanged.
+        """
         return (
-            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"postgresql+asyncpg://{_url_user(self.POSTGRES_USER)}"
+            f":{_url_password(self.POSTGRES_PASSWORD)}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+
+    @property
+    def alembic_database_url(self) -> str:
+        """
+        `database_url` for `config.set_main_option("sqlalchemy.url", ...)` in
+        Alembic's env.py. That value goes through configparser, where every `%`
+        must be written `%%`. Without this, an escaped credential breaks the
+        migrations with an interpolation error.
+        """
+        return self.database_url.replace("%", "%%")
 
     @property
     def redis_url(self) -> str:
