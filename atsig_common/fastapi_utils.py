@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .exceptions import (
@@ -16,6 +17,21 @@ logger = logging.getLogger("atsig-common")
 
 
 def setup_exception_handlers(app: FastAPI):
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(_, exc: RequestValidationError):
+        # Same shape as the FastAPI default, without the "input" of each error. The
+        # input is what the client sent, so it can hold personal data, and a NaN or
+        # Infinity in it cannot be serialized (the default handler answers 500).
+        errors = [
+            {
+                "type": error.get("type"),
+                "loc": list(error.get("loc", ())),
+                "msg": error.get("msg"),
+            }
+            for error in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": errors})
 
     @app.exception_handler(AtsigError)
     async def atsig_error_handler(_, exc: AtsigError):
