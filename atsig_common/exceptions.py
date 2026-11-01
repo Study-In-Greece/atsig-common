@@ -29,4 +29,8 @@ class NonRetryableError(Exception):
     Raise this when a failure is deterministic - retrying won't help
     (e.g. invalid payload schema). Skips remaining retry attempts and
     goes straight to DLQ instead of wasting retry_delay cycles.
+
+    The message is logged and stored in the DLQ as it is: name fields and error
+    types only, never their values (names, emails). Any other exception is
+    recorded by its type name alone.
     """

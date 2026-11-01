@@ -109,7 +109,7 @@ class BaseRedisConsumer:
         except Exception as dlq_err:
             logger.critical(
                 f"[Consumer] FAILED TO WRITE TO DLQ for message {message_id}. "
-                f"Emergency ACK will be applied. Error: {dlq_err}"
+                f"Emergency ACK will be applied. Error: {type(dlq_err).__name__}"
             )
 
             # Emergency ACK policy to prevent poison message loops
@@ -125,7 +125,7 @@ class BaseRedisConsumer:
             except Exception as ack_err:
                 logger.critical(
                     f"[Consumer] Emergency ACK FAILED for {message_id}. "
-                    f"Manual intervention required. Error: {ack_err}"
+                    f"Manual intervention required. Error: {type(ack_err).__name__}"
                 )
 
     async def process_message(
@@ -254,7 +254,7 @@ class BaseRedisConsumer:
                         break
 
                     except Exception as processing_error:
-                        last_error = str(processing_error)
+                        last_error = type(processing_error).__name__
 
                         logger.error(
                             f"[Consumer] Error processing {message_id} "
@@ -283,8 +283,9 @@ class BaseRedisConsumer:
                 )
 
             except Exception as fatal_error:
-                logger.exception(
-                    f"[Consumer] Fatal handler error for {message_id}: {fatal_error}"
+                logger.error(
+                    f"[Consumer] Fatal handler error for {message_id}: "
+                    f"{type(fatal_error).__name__}"
                 )
 
                 # Emergency ACK to prevent infinite poison loops
@@ -301,7 +302,7 @@ class BaseRedisConsumer:
 
                 except Exception as ack_error:
                     logger.critical(
-                        f"[Consumer] Emergency ACK FAILED for {message_id}: {ack_error}"
+                        f"[Consumer] Emergency ACK FAILED for {message_id}: {type(ack_error).__name__}"
                     )
 
     async def run(self):
