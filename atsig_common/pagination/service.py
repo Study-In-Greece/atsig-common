@@ -1,9 +1,40 @@
 from typing import Any
 
 from sqlalchemy import asc, desc, func, select
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.hybrid import hybrid_property
 
+from ..logger.config import get_logger
 from .schemas import PaginatedResponse, PaginationParams
+
+logger = get_logger("atsig_common.pagination")
+
+
+def sortable_names(model: Any) -> frozenset[str]:
+    """
+    Names a list may be sorted by: the mapped columns of the model and its hybrid
+    properties. Relationships, plain properties, methods and everything else on the
+    class (`metadata`, `registry`, `__class__`, ...) are not sortable.
+    """
+    mapper = getattr(sa_inspect(model, raiseerr=False), "mapper", None)
+    if mapper is None:
+        return frozenset()
+
+    names = set(mapper.column_attrs.keys())
+    names.update(
+        name
+        for name, descriptor in mapper.all_orm_descriptors.items()
+        if isinstance(descriptor, hybrid_property)
+    )
+    return frozenset(names)
+
+
+def _sort_column(model: Any, name: str | None) -> Any | None:
+    """The attribute to ORDER BY for `name`, or None when the model cannot sort by it."""
+    if not isinstance(name, str) or name not in sortable_names(model):
+        return None
+    return getattr(model, name, None)
 
 
 def build_paginated_response(
@@ -64,16 +95,26 @@ async def paginate_raw(
     effective_sort_model = sort_model or model
 
     # Attempt to find the sorting column in the specified model
-    sort_column = getattr(effective_sort_model, sort_attr, None)
+    sort_column = _sort_column(effective_sort_model, sort_attr)
 
     # Fallback to the primary model if a sort_model was provided but the attribute was missing
     if sort_column is None and sort_model is not None:
-        sort_column = getattr(model, sort_attr, None)
+        sort_column = _sort_column(model, sort_attr)
+
+    if sort_column is None and pagination.sort:
+        # Not something the model can sort by: the default order applies. Only the
+        # size and the start of what the caller sent are logged.
+        logger.warning(
+            f"Ignored an unknown sort field of {len(pagination.sort)} characters: "
+            f"{pagination.sort[:20]!r}"
+        )
 
     # If the attribute is still not found (e.g., invalid string), fallback to 'id' or 'created_at'
     if sort_column is None:
         sort_attr = "id"  # Reset attribute name for the deterministic check below
-        sort_column = getattr(model, "id", None) or getattr(model, "created_at", None)
+        sort_column = _sort_column(model, "id")
+        if sort_column is None:
+            sort_column = _sort_column(model, "created_at")
 
     # 3. Apply Sorting
     order_func = asc if order_type == "asc" else desc
@@ -85,9 +126,9 @@ async def paginate_raw(
         # We add a secondary sort key if the primary key is not already 'id' or 'created_at'.
         # This prevents inconsistent ordering when the primary sort column has duplicate values.
         if sort_attr not in ["id", "created_at"]:
-            secondary_col = getattr(model, "id", None) or getattr(
-                model, "created_at", None
-            )
+            secondary_col = _sort_column(model, "id")
+            if secondary_col is None:
+                secondary_col = _sort_column(model, "created_at")
             if secondary_col is not None:
                 query = query.order_by(desc(secondary_col))
     else:
