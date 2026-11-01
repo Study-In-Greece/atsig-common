@@ -14,14 +14,13 @@ class GroupEnum(StrEnum):
     DEPARTMENT_SECRETARY = "/Secretary/Department"
     PROGRAM_SECRETARY = "/Secretary/Program"
     ADMIN = "/Administrators"
-    HELPDESK = "/Helpdesk"
     AGENT = "/Agents"
     PARENT_AGENT = "/Agents/Parent"
     CHILD_AGENT = "/Agents/Child"
 
 
 # Groups with elevated privileges that can bypass standard scope checks
-SUPER_GROUPS = [GroupEnum.HELPDESK.value, GroupEnum.ADMIN.value]
+SUPER_GROUPS = [GroupEnum.ADMIN.value]
 
 # Primary user classifications
 MAIN_GROUPS = [
