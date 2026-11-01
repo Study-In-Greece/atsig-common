@@ -7,7 +7,9 @@ class UniAPI(BaseAPI):
         super().__init__(base_url=base_url, http_manager=http_manager)
 
     async def get_department(self, department_id: int | str):
-        return await self.get(endpoint=f"/departments/{department_id}")
+        return await self.get(
+            endpoint=f"/departments/{self.path_segment(department_id)}"
+        )
 
     async def get_departments_by_ids(self, ids: list[int]):
         return await self.get(endpoint="/departments/by_ids", params={"ids": ids})

@@ -12,6 +12,13 @@ from .manager import RedisManager
 logger = get_logger("atsig_common.redis.consumer")
 
 
+class InvalidMessageError(ValueError):
+    """
+    A stream entry is not a valid message envelope. Retrying cannot help, so the
+    entry goes straight to the DLQ. The text never holds values of the message.
+    """
+
+
 class BaseRedisConsumer:
     """
     Base Redis Stream Consumer with:
@@ -34,6 +41,7 @@ class BaseRedisConsumer:
         max_retries: int = 3,
         retry_delay: int = 2,
         concurrency: int = 10,
+        group_start_id: str = "0",
     ):
         self.redis_manager = redis_manager
         self.stream_name = stream_name
@@ -48,19 +56,24 @@ class BaseRedisConsumer:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
+        # Where a NEW consumer group starts reading. "0" is the beginning of the
+        # stream, so events sent before the group existed (a new environment, a new
+        # stream) are not lost. "$" would read only what arrives afterwards.
+        # An existing group keeps its own position and ignores this.
+        self.group_start_id = group_start_id
+
         self._is_running = False
         self._semaphore = asyncio.Semaphore(concurrency)
 
     async def _ensure_consumer_group(self):
         """
-        Create consumer group if it does not exist.
-        '$' means consume only new messages.
+        Create consumer group if it does not exist, starting at `group_start_id`.
         """
         try:
             await self.redis_manager.xgroup_create(
                 name=self.stream_name,
                 groupname=self.group_name,
-                id="$",
+                id=self.group_start_id,
                 mkstream=True,
             )
 
@@ -102,7 +115,7 @@ class BaseRedisConsumer:
         except Exception as dlq_err:
             logger.critical(
                 f"[Consumer] FAILED TO WRITE TO DLQ for message {message_id}. "
-                f"Emergency ACK will be applied. Error: {dlq_err}"
+                f"Emergency ACK will be applied. Error: {type(dlq_err).__name__}"
             )
 
             # Emergency ACK policy to prevent poison message loops
@@ -118,7 +131,7 @@ class BaseRedisConsumer:
             except Exception as ack_err:
                 logger.critical(
                     f"[Consumer] Emergency ACK FAILED for {message_id}. "
-                    f"Manual intervention required. Error: {ack_err}"
+                    f"Manual intervention required. Error: {type(ack_err).__name__}"
                 )
 
     async def process_message(
@@ -142,6 +155,51 @@ class BaseRedisConsumer:
 
         return value
 
+    @staticmethod
+    def _parse_envelope(normalized_payload: dict[str, Any]) -> tuple[str, dict]:
+        """
+        Splits a stream entry into (action, payload).
+
+        Raises:
+            InvalidMessageError: the entry has no action or data, or the data is
+                not a JSON object.
+        """
+        action = normalized_payload.get("action")
+        raw_data = normalized_payload.get("data")
+
+        if action is None or raw_data is None:
+            raise InvalidMessageError("missing 'action' or 'data'")
+
+        try:
+            payload = json.loads(raw_data)
+        except (TypeError, ValueError):
+            raise InvalidMessageError("'data' is not valid JSON") from None
+
+        if not isinstance(payload, dict):
+            raise InvalidMessageError("'data' is not a JSON object")
+
+        return action, payload
+
+    async def _reject_invalid_message(
+        self, message_id: str, raw_payload: dict[str, Any], reason: str
+    ):
+        """Sends an entry that is not a valid message to the DLQ, then ACKs it."""
+        logger.error(
+            f"[Consumer] Invalid message {message_id}: {reason}. Sending to DLQ."
+        )
+
+        await self._send_to_dlq(
+            message_id=message_id,
+            raw_payload={str(key): value for key, value in raw_payload.items()},
+            error_msg=f"Invalid message: {reason}",
+        )
+
+        await self.redis_manager.xack(
+            self.stream_name,
+            self.group_name,
+            message_id,
+        )
+
     async def _handle_message(
         self,
         message_id: str,
@@ -153,19 +211,19 @@ class BaseRedisConsumer:
 
         async with self._semaphore:
             try:
-                normalized_payload = {
-                    self._decode(k): self._decode(v) for k, v in raw_payload.items()
-                }
-
-                action = normalized_payload.get("action")
-                raw_data = normalized_payload.get("data")
-
-                if action is None or raw_data is None:
-                    raise ValueError(
-                        "Invalid message format: missing 'action' or 'data'"
+                try:
+                    normalized_payload = {
+                        self._decode(k): self._decode(v) for k, v in raw_payload.items()
+                    }
+                    action, payload = self._parse_envelope(normalized_payload)
+                except Exception as envelope_error:
+                    reason = (
+                        str(envelope_error)
+                        if isinstance(envelope_error, InvalidMessageError)
+                        else f"unreadable entry ({type(envelope_error).__name__})"
                     )
-
-                payload = json.loads(raw_data)
+                    await self._reject_invalid_message(message_id, raw_payload, reason)
+                    return
 
                 last_error = None
 
@@ -202,7 +260,7 @@ class BaseRedisConsumer:
                         break
 
                     except Exception as processing_error:
-                        last_error = str(processing_error)
+                        last_error = type(processing_error).__name__
 
                         logger.error(
                             f"[Consumer] Error processing {message_id} "
@@ -231,8 +289,9 @@ class BaseRedisConsumer:
                 )
 
             except Exception as fatal_error:
-                logger.exception(
-                    f"[Consumer] Fatal handler error for {message_id}: {fatal_error}"
+                logger.error(
+                    f"[Consumer] Fatal handler error for {message_id}: "
+                    f"{type(fatal_error).__name__}"
                 )
 
                 # Emergency ACK to prevent infinite poison loops
@@ -249,7 +308,7 @@ class BaseRedisConsumer:
 
                 except Exception as ack_error:
                     logger.critical(
-                        f"[Consumer] Emergency ACK FAILED for {message_id}: {ack_error}"
+                        f"[Consumer] Emergency ACK FAILED for {message_id}: {type(ack_error).__name__}"
                     )
 
     async def run(self):

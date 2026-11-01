@@ -21,7 +21,9 @@ class UsersAPI(BaseAPI):
         }
 
     async def get_secretary(self, secretary_id: str):
-        return await self.get(endpoint=f"/secretaries/{secretary_id}")
+        return await self.get(
+            endpoint=f"/secretaries/{self.path_segment(secretary_id)}"
+        )
 
     async def get_secretaries_by_uuids(self, uuids: list[str]):
         return await self.get(
@@ -45,15 +47,18 @@ class UsersAPI(BaseAPI):
         return await self.post(endpoint="/users", json=data)
 
     async def get_applicant(self, applicant_id: str):
-        return await self.get(endpoint=f"/applicants/{applicant_id}")
+        return await self.get(endpoint=f"/applicants/{self.path_segment(applicant_id)}")
 
     async def get_agent(self, agent_id: str):
-        return await self.get(endpoint=f"/agents/{agent_id}")
+        return await self.get(endpoint=f"/agents/{self.path_segment(agent_id)}")
 
     async def get_applicant_profile(self, applicant_id: str):
-        return await self.get(endpoint=f"/applicants/{applicant_id}/complete")
+        return await self.get(
+            endpoint=f"/applicants/{self.path_segment(applicant_id)}/complete"
+        )
 
     async def get_applicant_media_url(self, applicant_id: str, key: str):
         return await self.get(
-            endpoint=f"/applicants/{applicant_id}/media-url", params={"key": key}
+            endpoint=f"/applicants/{self.path_segment(applicant_id)}/media-url",
+            params={"key": key},
         )

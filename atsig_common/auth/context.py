@@ -66,15 +66,24 @@ class BaseAuthContext:
 
     def has_group(self, suffix: GroupEnum) -> bool:
         """
-        Checks if the user belongs to a specific group by matching the group name suffix.
+        Checks if the user belongs to a group: the group itself or any group below it.
+
+        This is the same rule as `validate_user_groups` (the scope check of the
+        routes), so a role and a scope can never disagree. A group that only ends
+        with the same text (`/Applicants/Administrators` is not `/Administrators`)
+        does not count.
 
         Args:
-            suffix (GroupEnum): The group type to check for.
+            suffix (GroupEnum): The group path to check for (the name is kept for
+                compatibility).
 
         Returns:
-            bool: True if any group name ends with the specified suffix value.
+            bool: True if a group of the user is the path or lies below it.
         """
-        return any(group.endswith(suffix.value) for group in self.groups)
+        return any(
+            group == suffix.value or group.startswith(f"{suffix.value}/")
+            for group in self.groups
+        )
 
     @property
     def is_admin(self):

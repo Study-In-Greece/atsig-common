@@ -52,7 +52,7 @@ class RedisManager:
         Gracefully closes the Redis connection and clears the internal client.
         """
         if self._redis:
-            await self._redis.close()
+            await self._redis.aclose()
             self._redis = None
 
     @property

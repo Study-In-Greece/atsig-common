@@ -151,7 +151,7 @@ class CRUDBaseService(
             ModelType: The updated and refreshed database object.
         """
         if isinstance(obj_in, dict):
-            update_data = obj_in
+            update_data = dict(obj_in)  # a copy: the caller's dict stays as it was
             if exclude:
                 for field in exclude:
                     update_data.pop(field, None)

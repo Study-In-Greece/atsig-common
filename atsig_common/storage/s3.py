@@ -62,6 +62,7 @@ class S3Storage(BaseStorage):
         """
         if self._s3_client:
             await self._s3_client.__aexit__(None, None, None)
+            self._s3_client = None
 
     def _ensure_client(self):
         """

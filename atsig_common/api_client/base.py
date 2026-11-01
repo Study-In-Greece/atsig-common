@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 import httpx
 
 from ..exceptions import (
@@ -37,6 +39,15 @@ class BaseAPI:
         self.base_url = base_url.rstrip("/")
         self.default_headers = headers or {}
         self.http_manager = http_manager
+
+    @staticmethod
+    def path_segment(value: object) -> str:
+        """
+        One URL path segment made from a value (an id). Every character that has a
+        meaning in a URL (`/`, `?`, `#`, `..`) is escaped, so a value can never
+        reach another endpoint: these calls carry the token of the service.
+        """
+        return quote(str(value), safe="")
 
     def _get_auth_headers(self) -> dict:
         """
@@ -81,7 +92,7 @@ class BaseAPI:
         }
 
         try:
-            response = await self.http_manager.client.request(
+            response = await manager.client.request(
                 method, url, headers=request_headers, **kwargs
             )
 
