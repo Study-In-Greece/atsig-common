@@ -92,7 +92,7 @@ class BaseAPI:
         }
 
         try:
-            response = await self.http_manager.client.request(
+            response = await manager.client.request(
                 method, url, headers=request_headers, **kwargs
             )
 

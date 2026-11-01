@@ -81,3 +81,23 @@ async def test_uni_api_department_id_is_escaped_too(http):
     await UniAPI("http://uni", http).get_department("1/../2")
 
     assert http.requests[0].url.raw_path.decode() == "/departments/1%2F..%2F2"
+
+
+async def test_without_an_http_manager_the_shared_client_is_used(monkeypatch):
+    from atsig_common.api_client.http_manager import HttpClientManager
+
+    seen: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr(
+        HttpClientManager,
+        "client",
+        httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+    )
+
+    # http_manager=None used to fail with an AttributeError (None.client)
+    assert await BaseAPI("http://svc").get("/ping") == {"ok": True}
+    assert seen == ["/ping"]
