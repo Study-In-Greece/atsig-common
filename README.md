@@ -7,13 +7,14 @@ Shared utilities package for the ATSIG (Study In Greece) microservices — `prog
 - **Auth** (`atsig_common.auth`) — Keycloak group-based RBAC (`GroupEnum`, `validate_user_groups`), `BaseAuthContext`/`BaseAccessPolicy`, token verification with cached signing keys (`decode_token`, `adecode_token`, `TokenVerifier`), and the shared FastAPI dependencies (`auth.dependencies`: the token is decoded once per request).
 - **Bootstrap** (`atsig_common.bootstrap`) — `build_core(settings)`: Keycloak, Redis, storage and API clients built from the settings, with a lifespan that starts and stops them in order.
 - **Observability** (`atsig_common.observability`, `atsig_common.logger`) — `init_observability` (JSON logging, Sentry), `setup_app` (handlers, request-context middleware, CORS, debug route outside production), request ids that travel with calls and events.
-- **Redis** (`atsig_common.redis`) — `RedisManager`, `EventProducer` (optional `maxlen`, retries, `emit_safe`), `BaseRedisConsumer` (consumer groups, retries, Dead Letter Queue, reclaim of pending messages, graceful shutdown), `UniCache`.
-- **Events** (`atsig_common.events`) — the events the services send each other, defined once (`ApplicantNameSync`, `UserSyncEvent`, `ProgrammeUpdateEvent`, ...) and the stream names.
+- **Redis** (`atsig_common.redis`) — `RedisManager`, `EventProducer` (optional `maxlen`, retries, `default_retries`, `emit_safe`), `BaseRedisConsumer` (consumer groups, retries, Dead Letter Queue, reclaim of pending messages, graceful shutdown, `ConsumerOutcome`, `consumer_name_from_hostname`), `UniCache`, and `make_get_event_producer`.
+- **Events** (`atsig_common.events`) — the events the services send each other, defined once (`ApplicantNameSync`, `UserSyncEvent`, `ProgrammeUpdateEvent`, ...), the stream names and the names of the dead letter streams (`dlq_name`).
 - **Files** (`atsig_common.files`, `atsig_common.middleware`) — upload type detection from the bytes, storage key checks, temporary files, and the multipart body limit middleware.
-- **Database** (`atsig_common.db`) — `create_db_engine` / `create_session_factory`, `IDMixin`, `TimestampMixin`.
+- **Database** (`atsig_common.db`) — `create_db_engine` / `create_db_engine_from_settings` (pool size from `DB_POOL_SIZE` and `DB_MAX_OVERFLOW`) / `create_session_factory`, `IDMixin`, `TimestampMixin`.
 - **Services** (`atsig_common.services`) — `CRUDBaseService`/`CRUDBaseAuthService` generic base classes and the service dependency factory.
 - **Pagination** (`atsig_common.pagination`) — pagination helpers and response schemas (sorting is limited to mapped columns and hybrid properties).
-- **Email** (`atsig_common.email`) — email client with template + bulk send support (`asend_email` for async code).
+- **Email** (`atsig_common.email`) — email client with template + bulk send support (`asend_email` for async code), and `make_get_email_client`.
+- **Time** (`atsig_common.time`) — `today_athens()`: the date in Greece, whatever the time zone of the container is (containers run in UTC).
 - **API client** (`atsig_common.api_client`) — async HTTP client factory for service-to-service calls (errors of the other service become `UpstreamError`, a 502).
 - **Exceptions** (`atsig_common.exceptions`) — shared error types used consistently across services.
 
@@ -22,6 +23,34 @@ Installed as an optional-extras package — each service pulls in only what it n
 ```toml
 atsig-common[fastapi,db,redis,auth] @ git+https://github.com/<org>/atsig-common@<tag>
 ```
+
+## Enabling the issuer and audience checks
+
+`KEYCLOAK_EXPECTED_ISSUER` and `KEYCLOAK_EXPECTED_AUDIENCE` (both off by default) make the
+token verification stricter. What we found out about a real Keycloak (one realm, one
+Keycloak client per frontend, one client for all the APIs):
+
+- **Issuer** (`https://<keycloak-host>/realms/<realm>`): the `iss` of a token is the
+  address the token was asked from, unless the hostname of Keycloak is fixed. When it is
+  fixed, the tokens of the browsers and the service tokens (client credentials, asked
+  through the internal address) have the SAME `iss`, and one value works for everybody.
+  Check it first: decode (locally) a token of each frontend and a service token and
+  compare `iss`. If they differ, a single expected issuer rejects one of them.
+- **Audience**: `aud` is not a policy, it comes from the roles of the user (the
+  "audience resolve" mapper): `account`, the names of clients whose roles the user has.
+  No token carries the client of the APIs unless you add it. To turn the check on, add an
+  Audience mapper (included client audience = the client of the APIs) in a shared client
+  scope, assign it as a DEFAULT scope to every frontend client AND to the client of the
+  APIs (for the service tokens), wait until the old tokens expire, check the claims, and
+  only then set `KEYCLOAK_EXPECTED_AUDIENCE`. Skipping the client of the APIs breaks
+  every service-to-service call. Assigning the scope only as a realm default scope is not
+  enough: that applies to new clients only.
+- The signature already ties a token to the keys of the realm (the keys come from its
+  JWKS), so the issuer check adds little on its own; the audience check protects against
+  a token issued in the same realm for another client.
+- Decode a token without sending it anywhere:
+  `python3 -c "import sys,base64,json;t=sys.argv[1].split('.')[1];print(json.loads(base64.urlsafe_b64decode(t+'='*(-len(t)%4))))" "<token>"`
+  (read only `iss`, `aud`, `azp`).
 
 ## Requirements
 
