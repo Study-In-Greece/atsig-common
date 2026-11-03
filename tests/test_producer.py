@@ -85,6 +85,26 @@ async def test_retries_run_out_and_the_last_error_is_raised():
     assert len(redis.calls) == 3
 
 
+async def test_the_default_retries_apply_when_the_call_says_nothing(no_sleep):
+    redis = FlakyRedis(failures=2)
+
+    assert await EventProducer(redis, default_retries=2).emit("e", "sync", {}) == "1-0"
+    assert len(redis.calls) == 3
+
+
+async def test_the_call_beats_the_default_retries():
+    redis = FlakyRedis(failures=1)
+
+    with pytest.raises(ConnectionError):
+        await EventProducer(redis, default_retries=3).emit("e", "sync", {}, retries=0)
+
+    assert len(redis.calls) == 1
+
+
+async def test_no_default_retries_keeps_the_old_behaviour():
+    assert EventProducer(FlakyRedis()).default_retries == 0
+
+
 async def test_a_pipeline_is_never_retried():
     class Pipe(FlakyRedis):
         pass

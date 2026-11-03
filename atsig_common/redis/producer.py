@@ -19,11 +19,20 @@ class EventProducer:
         redis_manager: The connection.
         default_maxlen: When set, every stream is trimmed to about this many entries
             on each emit (Redis `MAXLEN ~`). None keeps every entry, forever.
+        default_retries: How many more times `emit` tries when Redis fails, unless the
+            call says otherwise. 0 (the default) raises at the first failure. A retry
+            can publish an event twice, so the consumers must be idempotent.
     """
 
-    def __init__(self, redis_manager: RedisManager, default_maxlen: int | None = None):
+    def __init__(
+        self,
+        redis_manager: RedisManager,
+        default_maxlen: int | None = None,
+        default_retries: int = 0,
+    ):
         self.redis_manager = redis_manager
         self.default_maxlen = default_maxlen
+        self.default_retries = default_retries
 
     async def emit(
         self,
@@ -33,7 +42,7 @@ class EventProducer:
         pipe: RedisManager | Pipeline | None = None,
         *,
         maxlen: int | None = None,
-        retries: int = 0,
+        retries: int | None = None,
         retry_delay: float = 0.2,
     ) -> str:
         """
@@ -74,6 +83,8 @@ class EventProducer:
         if limit is not None:
             options = {"maxlen": limit, "approximate": True}
 
+        if retries is None:
+            retries = self.default_retries
         attempts = (retries if pipe is None else 0) + 1
         for attempt in range(1, attempts + 1):
             try:
