@@ -1,17 +1,42 @@
 import asyncio
+import enum
 import json
+import socket
 import time
 import uuid
 from typing import Any
 
 from redis.exceptions import ResponseError
 
+from ..events.schemas import dlq_name
 from ..exceptions import NonRetryableError
 from ..logger.config import get_logger
 from ..logger.context import is_valid_request_id, request_id_var
 from .manager import RedisManager
 
 logger = get_logger("atsig_common.redis.consumer")
+
+
+class ConsumerOutcome(enum.StrEnum):
+    """
+    What a consumer did with an event: changed the data, or left it alone (a stale or
+    duplicate event). `process_message` may return it; the base consumer ACKs the
+    message either way and only logs the outcome. The DLQ replay of a service can
+    show it to the admin.
+    """
+
+    applied = "applied"
+    ignored = "ignored"
+
+
+def consumer_name_from_hostname(prefix: str) -> str:
+    """
+    A consumer name that is the same on every start of the same container
+    (`prefix_<hostname>`). Pass it as `consumer_name`, so that a restart does not
+    leave a new dead name in the group each time. The hostname of a container changes
+    only when the container is created again.
+    """
+    return f"{prefix}_{socket.gethostname()}"
 
 
 class InvalidMessageError(ValueError):
@@ -59,12 +84,13 @@ class BaseRedisConsumer:
         self.group_name = group_name
 
         # A random name per start by default, so two copies of a worker never share
-        # one. Give a fixed name (e.g. from the hostname) to keep the same consumer
-        # across restarts instead of leaving a new dead name in the group each time.
+        # one. Give a fixed name (see `consumer_name_from_hostname`) to keep the same
+        # consumer across restarts instead of leaving a new dead name in the group
+        # each time.
         self.consumer_name = (
             consumer_name or f"{consumer_prefix}_{uuid.uuid4().hex[:6]}"
         )
-        self.dlq_name = f"{stream_name}_dlq"
+        self.dlq_name = dlq_name(stream_name)
 
         self.block_ms = block_ms
         self.batch_size = batch_size
@@ -179,9 +205,10 @@ class BaseRedisConsumer:
         message_id: str,
         action: str,
         payload: dict[str, Any],
-    ):
+    ) -> ConsumerOutcome | None:
         """
-        Override this method in each service.
+        Override this method in each service. Return `ConsumerOutcome.applied` or
+        `ConsumerOutcome.ignored` if you want it logged; `None` is fine too.
         """
         raise NotImplementedError("Subclasses must implement process_message()")
 
@@ -385,7 +412,9 @@ class BaseRedisConsumer:
                     )
 
                     async with self._semaphore:
-                        await self.process_message(message_id, action, payload)
+                        outcome = await self.process_message(
+                            message_id, action, payload
+                        )
 
                         await self.redis_manager.xack(
                             self.stream_name,
@@ -393,7 +422,10 @@ class BaseRedisConsumer:
                             message_id,
                         )
 
-                    logger.debug(f"[Consumer] Message {message_id} ACKed successfully.")
+                    logger.debug(
+                        f"[Consumer] Message {message_id} ACKed successfully"
+                        f"{f' ({outcome})' if outcome else ''}."
+                    )
                     return
 
                 except NonRetryableError as non_retryable_error:
