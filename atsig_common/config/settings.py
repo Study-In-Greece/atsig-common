@@ -39,6 +39,11 @@ class BaseAtsigSettings(BaseSettings):
     POSTGRES_SERVER: str
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str
+    # The connection pool of ONE process. A service runs several (web workers, a
+    # consumer), and PostgreSQL has a limit of connections for all the services:
+    # workers x (DB_POOL_SIZE + DB_MAX_OVERFLOW) must stay well under it.
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
 
     # --- 3. AUTH (Keycloak) ---
     KEYCLOAK_REALM: str
