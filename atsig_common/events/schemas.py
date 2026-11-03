@@ -109,5 +109,5 @@ class ProgrammeUpdateEvent(EventPayload):
     is_archived: bool
     type: str | None = None
     department_id: int
-    secretaries: list[str] = []
+    secretaries: list[str]
     version: int
