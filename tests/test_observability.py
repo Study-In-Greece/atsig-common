@@ -62,6 +62,19 @@ def test_init_starts_sentry_in_production_with_the_scrub_hook(monkeypatch):
     assert inits[0]["environment"] == "production"
 
 
+def test_init_passes_the_server_name_only_when_it_is_given(monkeypatch):
+    inits = []
+    monkeypatch.setattr(logging.config, "dictConfig", lambda config: None)
+    monkeypatch.setattr(sentry_sdk, "init", lambda **kw: inits.append(kw))
+    production = settings("production", dsn="https://x@y/1")
+
+    init_observability(production, "svc", server_name="svc-worker")
+    init_observability(production, "svc")
+
+    assert inits[0]["server_name"] == "svc-worker"
+    assert "server_name" not in inits[1]
+
+
 def test_init_needs_a_dsn_even_in_production(monkeypatch):
     monkeypatch.setattr(logging.config, "dictConfig", lambda config: None)
 
