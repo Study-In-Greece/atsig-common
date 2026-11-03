@@ -1,11 +1,16 @@
 [project]
 name = "atsig-common"
-version = "0.6.0"
+version = "0.7.0"
 description = "Shared utilities for ATSIG microservices"
 authors = [{ name = "th-papaz" }]
 requires-python = ">=3.13"
 
-dependencies = ["pydantic[email]>=2.12.0,<3.0.0", "pydantic-settings>=2.7.0"]
+# tzdata: ZoneInfo (atsig_common.time) needs it on images without system time zones
+dependencies = [
+    "pydantic[email]>=2.12.0,<3.0.0",
+    "pydantic-settings>=2.7.0",
+    "tzdata>=2024.1",
+]
 
 [project.optional-dependencies]
 

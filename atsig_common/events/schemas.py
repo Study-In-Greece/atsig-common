@@ -24,6 +24,16 @@ class Streams:
 class Actions:
     SYNC = "sync"
     DELETE = "delete"
+    # What an admin screen shows for a DLQ entry that can not be read back
+    UNREADABLE = "unreadable"
+
+
+DLQ_SUFFIX = "_dlq"
+
+
+def dlq_name(stream_name: str) -> str:
+    """The name of the dead letter stream of a stream (`calls_events` -> `calls_events_dlq`)."""
+    return f"{stream_name}{DLQ_SUFFIX}"
 
 
 def validation_problems(error: ValidationError) -> str:
@@ -109,5 +119,5 @@ class ProgrammeUpdateEvent(EventPayload):
     is_archived: bool
     type: str | None = None
     department_id: int
-    secretaries: list[str] = []
+    secretaries: list[str]
     version: int

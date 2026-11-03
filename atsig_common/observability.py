@@ -48,9 +48,15 @@ def init_observability(
     service_name: str,
     *,
     traces_sample_rate: float = 0.1,
+    server_name: str | None = None,
 ) -> bool:
     """
     Sets up the JSON logging, and Sentry/GlitchTip in production when a DSN is set.
+
+    Args:
+        server_name: The name Sentry shows for the process, to tell apart processes of
+            the same service (e.g. the web app and its worker). Sentry's own default
+            (the hostname) when it is not given.
 
     Returns:
         True when Sentry was started.
@@ -65,6 +71,10 @@ def init_observability(
     if settings.ENVIRONMENT != "production" or not settings.GLITCHTIP_DSN:
         return False
 
+    options: dict[str, Any] = {}
+    if server_name:
+        options["server_name"] = server_name
+
     sentry_sdk.init(
         dsn=settings.GLITCHTIP_DSN,
         environment=settings.ENVIRONMENT,
@@ -73,6 +83,7 @@ def init_observability(
         ],
         traces_sample_rate=traces_sample_rate,
         before_send=scrub_sentry_event,
+        **options,
     )
     return True
 

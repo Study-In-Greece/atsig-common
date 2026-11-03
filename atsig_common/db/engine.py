@@ -32,6 +32,23 @@ def create_db_engine(database_url: str, **overrides: Any) -> AsyncEngine:
     return create_async_engine(database_url, **{**DEFAULT_ENGINE_OPTIONS, **overrides})
 
 
+def create_db_engine_from_settings(settings: Any, **overrides: Any) -> AsyncEngine:
+    """
+    `create_db_engine` with the URL and the size of the pool read from the settings
+    (`database_url`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`). Settings without the pool
+    fields get the default pool. Any keyword overrides the settings.
+    """
+    options: dict[str, Any] = {}
+    for option, field in (
+        ("pool_size", "DB_POOL_SIZE"),
+        ("max_overflow", "DB_MAX_OVERFLOW"),
+    ):
+        value = getattr(settings, field, None)
+        if value is not None:
+            options[option] = value
+    return create_db_engine(settings.database_url, **{**options, **overrides})
+
+
 def create_session_factory(
     engine: AsyncEngine, *, expire_on_commit: bool = False
 ) -> async_sessionmaker:

@@ -2,6 +2,45 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.7.0
+
+Everything is additive and optional except the first item of the upgrade notes.
+
+### Upgrade notes
+
+- **`ProgrammeUpdateEvent.secretaries` is required** (it defaulted to `[]`). An event
+  without the field used to read as "the programme has no secretaries" and cleared them;
+  now it is refused by the validation. The producer (programmes-api) always sends the
+  field. A service that kept a subclass only to make it required can drop it.
+- **New base dependency: `tzdata`** (`atsig_common.time`). Images without system time
+  zones, like the Alpine ones, need it for `ZoneInfo`.
+- Pool settings: `BaseAtsigSettings.DB_POOL_SIZE` (10) and `DB_MAX_OVERFLOW` (20), the
+  size of the pool of ONE process. The defaults are the pool of today, so nothing changes
+  until a service sets them. Read them with `create_db_engine_from_settings(settings)`.
+  A service overrides the defaults in its own settings class
+  (`DB_POOL_SIZE: int = 5`) or per container with the environment.
+- The base consumer logs the outcome that `process_message` returns, at debug level. A
+  consumer that returns nothing behaves as before.
+
+### Added
+
+- `atsig_common.db.engine.create_db_engine_from_settings(settings, **overrides)`.
+- `atsig_common.redis.consumer.ConsumerOutcome` (`applied`, `ignored`) and the return
+  annotation `ConsumerOutcome | None` of `process_message`;
+  `consumer_name_from_hostname(prefix)` for a name that does not change at a restart.
+- `atsig_common.events`: `Actions.UNREADABLE` (the action an admin screen shows for a DLQ
+  entry that can not be read back), `dlq_name(stream_name)` and `DLQ_SUFFIX`. The consumer
+  uses `dlq_name`; the name is the same as before (`<stream>_dlq`).
+- `init_observability(..., server_name=...)`: the name Sentry shows for the process (the
+  web app and its worker). Not sent when it is not given.
+- `atsig_common.time`: `ATHENS` and `today_athens()`.
+- `atsig_common.email.dependencies.make_get_email_client(settings)` and
+  `atsig_common.redis.dependencies.make_get_event_producer(redis_manager, **options)`:
+  one client per process, with the return annotation that `make_service_factory` reads.
+- `EventProducer(default_retries=0)`: `emit(retries=None)` uses it, an explicit value
+  wins. A retry can publish an event twice, so the consumers must be idempotent.
+- README: how to enable the issuer and audience checks, and what to look at first.
+
 ## 0.6.0
 
 The package version in `pyproject.toml` was `0.5.0` while the last tag was `0.3.0`

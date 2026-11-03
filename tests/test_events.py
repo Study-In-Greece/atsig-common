@@ -148,11 +148,12 @@ def test_the_programme_event_round_trips():
 
 def test_the_programme_event_defaults_and_requirements():
     event = ProgrammeUpdateEvent.model_validate(
-        {k: v for k, v in PROGRAMME.items() if k not in ("type", "secretaries")}
+        {k: v for k, v in PROGRAMME.items() if k != "type"}
     )
 
     assert event.type is None
-    assert event.secretaries == []
+    # `secretaries` is required: an event without it must not read as "no secretaries"
+    # and clear the secretaries of the programme
     for required in (
         "id",
         "name_gr",
@@ -160,6 +161,7 @@ def test_the_programme_event_defaults_and_requirements():
         "is_archived",
         "department_id",
         "version",
+        "secretaries",
     ):
         with pytest.raises(ValidationError):
             ProgrammeUpdateEvent.model_validate(

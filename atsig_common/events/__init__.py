@@ -10,6 +10,7 @@ disciplines and extra fields of a call and is still defined by each service.
 """
 
 from .schemas import (
+    DLQ_SUFFIX,
     Actions,
     ApplicantNameSync,
     EventPayload,
@@ -17,16 +18,19 @@ from .schemas import (
     Streams,
     UserDeleteEvent,
     UserSyncEvent,
+    dlq_name,
     validation_problems,
 )
 
 __all__ = [
     "Actions",
     "ApplicantNameSync",
+    "DLQ_SUFFIX",
     "EventPayload",
     "ProgrammeUpdateEvent",
     "Streams",
     "UserDeleteEvent",
     "UserSyncEvent",
+    "dlq_name",
     "validation_problems",
 ]
