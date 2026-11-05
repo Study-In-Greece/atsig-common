@@ -2,9 +2,10 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
-## 0.7.1 (unreleased)
+## 0.7.1
 
-No behaviour change for a service that has the extras it builds.
+Fixes only, nothing to change in a service: the public API and the signatures are
+the same.
 
 ### Fixed
 
@@ -13,7 +14,13 @@ No behaviour change for a service that has the extras it builds.
   `storage`, `http`). They are now imported only when `build_core` builds them: a service
   without Redis (the uni-api) uses `build_core(settings, redis=False, api_clients=False)`
   without installing it. Asking for a client whose extra is missing raises `ImportError`
-  from `build_core`, not at import time.
+  from `build_core`, not at import time. A service that has the extras sees no change.
+- `make_get_optional_auth_context` decoded the token itself, without the payload that
+  `get_token_payload` keeps in `request.state`: a protected route whose policy is built
+  from the optional context (the programmes-api) decoded the token twice. Both now share
+  the decoded payload of the request, in whichever order they run. Only a valid token is
+  kept, so an invalid one behaves as before (anonymous or 401 for the optional context,
+  401 for the scope check).
 
 ## 0.7.0
 
