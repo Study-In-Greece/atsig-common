@@ -89,6 +89,25 @@ def make_app(keycloak, **optional_kwargs) -> TestClient:
     async def maybe(ctx: Ctx | None = Depends(get_optional)):
         return {"user": ctx.email if ctx else None}
 
+    # The pattern of the programmes-api: the scope check, and the policy built from the
+    # optional context
+    @app.get(
+        "/scoped-optional", dependencies=[Security(get_auth, scopes=["/Evaluators"])]
+    )
+    async def scoped_optional(ctx: Ctx | None = Depends(get_optional)):
+        return {"user": ctx.email if ctx else None}
+
+    # The other order: the optional context runs before the scope check
+    @app.get(
+        "/optional-first",
+        dependencies=[
+            Depends(get_optional),
+            Security(get_auth, scopes=["/Evaluators"]),
+        ],
+    )
+    async def optional_first():
+        return {}
+
     return TestClient(app)
 
 
@@ -170,3 +189,38 @@ def test_optional_context_invalid_token_can_be_a_401(keycloak):
 
     assert client.get("/maybe", headers=bearer("expired")).status_code == 401
     assert client.get("/maybe").json() == {"user": None}
+
+
+def test_scope_check_and_optional_context_decode_the_token_once(keycloak):
+    client = make_app(keycloak)
+
+    response = client.get("/scoped-optional", headers=bearer("good"))
+
+    assert response.json() == {"user": "u1@example.com"}
+    assert keycloak.decodes == 1  # was 2: get_auth and the optional context
+
+
+def test_optional_context_first_then_scope_check_decode_once(keycloak):
+    client = make_app(keycloak)
+
+    assert client.get("/optional-first", headers=bearer("good")).status_code == 200
+    assert keycloak.decodes == 1
+
+
+def test_the_payload_is_kept_for_one_request_only(keycloak):
+    client = make_app(keycloak)
+
+    client.get("/scoped-optional", headers=bearer("good"))
+    client.get("/scoped-optional", headers=bearer("good"))
+
+    assert keycloak.decodes == 2
+
+
+def test_a_token_that_fails_is_not_kept(keycloak):
+    """The optional context treats it as anonymous; the scope check still refuses it."""
+    client = make_app(keycloak)
+
+    response = client.get("/optional-first", headers=bearer("expired"))
+
+    assert response.status_code == 401
+    assert keycloak.decodes == 2  # decoded again, and failed again, by the scope check

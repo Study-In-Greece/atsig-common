@@ -6,9 +6,9 @@ checked the claims of the token, another failed with a KeyError (500) when a nam
 was missing, and a request decoded the token twice (once for the scope check, once
 for the user context).
 
-Here the token is decoded ONCE per request: `get_token_payload` keeps the decoded
-payload in `request.state`, and the scope check, the context and the policy all read
-it from there. (FastAPI's own cache of dependencies is not enough: a dependency that
+Here the token is decoded ONCE per request: the decoded payload is kept in
+`request.state`, and the scope check, the context, the policy and the optional
+context all read it from there, whichever of them runs first. (FastAPI's own cache of dependencies is not enough: a dependency that
 is resolved below a `Security(..., scopes=[...])` gets a different cache key than the
 same dependency resolved elsewhere, so it would run twice.)
 
@@ -88,6 +88,23 @@ def build_auth_context(
     )
 
 
+async def _decode_once(
+    request: Request, keycloak_client: KeycloakOpenID, token: str
+) -> dict:
+    """
+    Decodes the token, or returns the payload already decoded for the same token in
+    this request. Only a valid token is kept: one that fails is decoded (and fails)
+    again by the next dependency that asks.
+    """
+    cached = getattr(request.state, "token_payload", None)
+    if cached is not None and cached[0] == token:
+        return cached[1]
+
+    payload = await adecode_token(keycloak_client, token)
+    request.state.token_payload = (token, payload)
+    return payload
+
+
 def make_get_token_payload(
     oauth2_scheme: Callable[..., Any], keycloak_client: KeycloakOpenID
 ) -> Callable[..., Any]:
@@ -96,13 +113,7 @@ def make_get_token_payload(
     async def get_token_payload(
         request: Request, token: str = Depends(oauth2_scheme)
     ) -> dict:
-        cached = getattr(request.state, "token_payload", None)
-        if cached is not None and cached[0] == token:
-            return cached[1]
-
-        payload = await adecode_token(keycloak_client, token)
-        request.state.token_payload = (token, payload)
-        return payload
+        return await _decode_once(request, keycloak_client, token)
 
     return get_token_payload
 
@@ -167,16 +178,21 @@ def make_get_optional_auth_context(
 
     - "anonymous": None, the user is treated as not logged in.
     - "401": the request is refused with a 401.
+
+    The token is decoded once per request: it shares the payload with
+    `get_token_payload` (see `_decode_once`), so a protected route whose policy is
+    built from the optional context decodes it once, not twice.
     """
 
     async def get_optional_auth_context(
+        request: Request,
         session: AsyncSession = Depends(get_session),
         token: str | None = Depends(optional_oauth2_scheme),
     ) -> ContextT | None:
         if not token:
             return None
         try:
-            payload = await adecode_token(keycloak_client, token)
+            payload = await _decode_once(request, keycloak_client, token)
             context = build_auth_context(
                 payload, context_cls=context_cls, strict=strict
             )
