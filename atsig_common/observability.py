@@ -7,21 +7,25 @@ handlers, request-context middleware, CORS and the debug route.
     app = FastAPI(...)
     app.add_middleware(MultipartBodyLimitMiddleware, ...)   # innermost, if used
     setup_app(app, settings)                                 # logging, CORS: outer
+
+`init_observability` needs no FastAPI: a worker (Celery, a stream consumer) uses it
+too. FastAPI is imported only by `setup_app`.
 """
+
+from __future__ import annotations
 
 import logging
 import logging.config
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
 
 import sentry_sdk
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from sentry_sdk.integrations.logging import LoggingIntegration
 
-from .fastapi_utils import setup_exception_handlers
 from .logger.config import get_logging_config
-from .logger.middleware import LoggingContextMiddleware
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 
 def scrub_sentry_event(event: dict[str, Any], hint: Any = None) -> dict[str, Any]:
@@ -100,6 +104,13 @@ def setup_app(app: FastAPI, settings: Any, *, debug_route: bool | None = None) -
         debug_route: Adds `GET /debug-error`, which raises an error, for testing the
             error reports. By default only when the environment is not production.
     """
+    # Here and not at the top: a worker that uses only init_observability has no
+    # FastAPI installed
+    from fastapi.middleware.cors import CORSMiddleware
+
+    from .fastapi_utils import setup_exception_handlers
+    from .logger.middleware import LoggingContextMiddleware
+
     setup_exception_handlers(app)
     app.add_middleware(
         LoggingContextMiddleware,

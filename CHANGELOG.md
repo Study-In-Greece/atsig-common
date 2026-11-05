@@ -2,6 +2,18 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.7.2
+
+A fix only, nothing to change in a service.
+
+### Fixed
+
+- `atsig_common.observability` imported FastAPI at the top, for `setup_app`, so a
+  worker without the `fastapi` extra (the Celery workers and the stream consumer of the
+  email-service) could not use `init_observability`. FastAPI is now imported only by
+  `setup_app`; `init_observability` and `scrub_sentry_event` need the `observability`
+  extra only. `setup_app` without FastAPI raises `ImportError`.
+
 ## 0.7.1
 
 Fixes only, nothing to change in a service: the public API and the signatures are

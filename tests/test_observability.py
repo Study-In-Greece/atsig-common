@@ -1,4 +1,6 @@
 import logging.config
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import sentry_sdk
@@ -122,3 +124,45 @@ def test_exception_handlers_are_installed():
 
     assert response.status_code == 422
     assert set(response.json()["detail"][0]) == {"type", "loc", "msg"}
+
+
+# --- init_observability without FastAPI (0.7.2) ----------------------------------------
+
+
+def _run_without_fastapi(body: str) -> subprocess.CompletedProcess:
+    """Runs `body` in a new interpreter where fastapi and starlette can not be imported."""
+    code = (
+        "import sys\n"
+        "sys.modules['fastapi'] = None\n"
+        "sys.modules['starlette'] = None\n"
+        "from types import SimpleNamespace\n"
+        "settings = SimpleNamespace(ENVIRONMENT='development', GLITCHTIP_DSN=None,"
+        " LOG_USER_EMAIL=False)\n" + body
+    )
+    return subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=60
+    )
+
+
+def test_init_observability_needs_no_fastapi():
+    """A worker without FastAPI (the Celery workers of the email-service)."""
+    result = _run_without_fastapi(
+        "from atsig_common.observability import init_observability, scrub_sentry_event\n"
+        "assert init_observability(settings, 'email-worker') is False\n"
+        "assert 'fastapi' not in [m for m in sys.modules if sys.modules[m] is not None]\n"
+        "print('ok')\n"
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().endswith("ok")
+
+
+def test_setup_app_without_fastapi_fails_clearly():
+    result = _run_without_fastapi(
+        "from atsig_common.observability import setup_app\n"
+        "try:\n"
+        "    setup_app(object(), settings)\n"
+        "except ImportError:\n"
+        "    print('ImportError')\n"
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().endswith("ImportError")
