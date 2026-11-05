@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -168,3 +170,68 @@ def test_the_lifespan_cleans_up_even_when_a_shutdown_step_fails(events):
 
     assert events[-1] == "stop http"
     assert ran == ["after"]  # a failing step does not skip the next ones
+
+
+# --- The clients that are left out are not imported (0.7.1) ---------------------------
+
+_SETTINGS_CODE = """
+from types import SimpleNamespace
+settings = SimpleNamespace(
+    AUTHORIZATION_URL="http://kc", KEYCLOAK_CLIENT_ID="c", KEYCLOAK_REALM="msc",
+    KEYCLOAK_CLIENT_SECRET="s", KEYCLOAK_VERIFY_SSL=True, REDIS_SERVER="redis",
+    REDIS_PORT=6379, REDIS_PASSWORD=None, R2_ENDPOINT_URL="http://r2",
+    R2_ACCESS_KEY_ID="k", R2_SECRET_ACCESS_KEY="s", R2_PRIVATE_BUCKET=None,
+    R2_PUBLIC_BUCKET="public",
+)
+"""
+
+
+def _run_without(blocked: list[str], body: str) -> subprocess.CompletedProcess:
+    """Runs `body` in a new interpreter where the `blocked` packages can not be imported."""
+    code = (
+        "import sys\n"
+        + "".join(f"sys.modules[{name!r}] = None\n" for name in blocked)
+        + _SETTINGS_CODE
+        + body
+    )
+    return subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=60
+    )
+
+
+def test_build_core_without_the_redis_and_storage_packages():
+    """A service without the redis and storage extras (the uni-api has no Redis)."""
+    result = _run_without(
+        ["redis", "aioboto3"],
+        "from atsig_common.bootstrap import build_core\n"
+        "core = build_core(settings, redis=False, storage=False, api_clients=False)\n"
+        "assert core.redis is None and core.storage is None and core.api_factory is None\n"
+        "assert 'atsig_common.api_client.factory' not in sys.modules\n"
+        "print('ok')\n",
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
+
+
+def test_build_core_with_storage_only_needs_no_redis():
+    result = _run_without(
+        ["redis"],
+        "from atsig_common.bootstrap import build_core\n"
+        "core = build_core(settings, redis=False, api_clients=False)\n"
+        "assert type(core.storage).__name__ == 'S3Storage'\n"
+        "print('ok')\n",
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_asking_for_redis_without_the_package_fails_clearly():
+    result = _run_without(
+        ["redis"],
+        "from atsig_common.bootstrap import build_core\n"
+        "try:\n"
+        "    build_core(settings, storage=False, api_clients=False)\n"
+        "except ImportError:\n"
+        "    print('ImportError')\n",
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ImportError"

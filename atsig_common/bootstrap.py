@@ -9,25 +9,31 @@ API clients) and the same lifespan; this is that, once.
     get_token_payload = make_get_token_payload(core.oauth2_scheme, core.keycloak)
 
 A service that has nothing to wire (no Redis, no storage) leaves it out:
-`build_core(settings, redis=False, storage=False)`.
+`build_core(settings, redis=False, storage=False)`. The clients that are left out are
+not even imported, so the service does not need their extras (`redis`, `storage`,
+`http`).
 """
+
+from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from keycloak import KeycloakOpenID
 
-from .api_client.factory import APIClientFactory
 from .auth.keycloak import create_keycloak_client
 from .auth.oauth import create_oauth_scheme
 from .auth.service_token import ServiceTokenManager, create_service_token_manager
 from .logger.config import get_logger
-from .redis.manager import RedisManager
-from .storage.s3 import S3Storage
+
+if TYPE_CHECKING:
+    from .api_client.factory import APIClientFactory
+    from .redis.manager import RedisManager
+    from .storage.s3 import S3Storage
 
 logger = get_logger("atsig_common.bootstrap")
 
@@ -133,6 +139,8 @@ def build_core(
     if redis:
         if not settings.REDIS_SERVER:
             raise ValueError("REDIS_SERVER is not set, but redis=True")
+        from .redis.manager import RedisManager
+
         redis_manager = RedisManager(
             host=settings.REDIS_SERVER,
             port=settings.REDIS_PORT,
@@ -141,6 +149,8 @@ def build_core(
 
     storage_client = None
     if storage:
+        from .storage.s3 import S3Storage
+
         storage_client = S3Storage(
             r2_endpoint_url=settings.R2_ENDPOINT_URL,
             r2_access_key_id=settings.R2_ACCESS_KEY_ID,
@@ -148,6 +158,12 @@ def build_core(
             r2_private_bucket=settings.R2_PRIVATE_BUCKET,
             r2_public_bucket=settings.R2_PUBLIC_BUCKET,
         )
+
+    api_factory = None
+    if api_clients:
+        from .api_client.factory import APIClientFactory
+
+        api_factory = APIClientFactory(settings=settings, token_manager=token_manager)
 
     return Core(
         keycloak=keycloak,
@@ -162,9 +178,5 @@ def build_core(
         token_manager=token_manager,
         redis=redis_manager,
         storage=storage_client,
-        api_factory=(
-            APIClientFactory(settings=settings, token_manager=token_manager)
-            if api_clients
-            else None
-        ),
+        api_factory=api_factory,
     )

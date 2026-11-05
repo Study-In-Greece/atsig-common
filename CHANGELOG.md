@@ -2,6 +2,19 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.7.1 (unreleased)
+
+No behaviour change for a service that has the extras it builds.
+
+### Fixed
+
+- `atsig_common.bootstrap` imported Redis, the R2/S3 storage and the API clients at the
+  top, so `build_core(settings, redis=False, ...)` still needed the `redis` extra (and
+  `storage`, `http`). They are now imported only when `build_core` builds them: a service
+  without Redis (the uni-api) uses `build_core(settings, redis=False, api_clients=False)`
+  without installing it. Asking for a client whose extra is missing raises `ImportError`
+  from `build_core`, not at import time.
+
 ## 0.7.0
 
 Everything is additive and optional except the first item of the upgrade notes.
