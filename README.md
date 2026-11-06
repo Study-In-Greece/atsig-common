@@ -13,6 +13,7 @@ Shared utilities package for the ATSIG (Study In Greece) microservices — `prog
 - **Database** (`atsig_common.db`) — `create_db_engine` / `create_db_engine_from_settings` (pool size from `DB_POOL_SIZE` and `DB_MAX_OVERFLOW`) / `create_session_factory`, `IDMixin`, `TimestampMixin`.
 - **Services** (`atsig_common.services`) — `CRUDBaseService`/`CRUDBaseAuthService` generic base classes and the service dependency factory.
 - **Pagination** (`atsig_common.pagination`) — pagination helpers and response schemas (sorting is limited to mapped columns and hybrid properties).
+- **Schemas** (`atsig_common.schemas`) — `IdRead` and `FileUrlRead`, the response models of the routes that answer `{"id": ...}` (a delete) or `{"url": ...}` (a signed URL).
 - **Email** (`atsig_common.email`) — email client with template + bulk send support (`asend_email` for async code), and `make_get_email_client`.
 - **Time** (`atsig_common.time`) — `today_athens()`: the date in Greece, whatever the time zone of the container is (containers run in UTC).
 - **API client** (`atsig_common.api_client`) — async HTTP client factory for service-to-service calls (errors of the other service become `UpstreamError`, a 502).

@@ -2,6 +2,25 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.8.0
+
+Additive: nothing changes in a service until it uses the new schemas.
+
+### Added
+
+- `atsig_common.schemas` with two response models, `IdRead` (`{"id": int}`) and
+  `FileUrlRead` (`{"url": str}`), for the routes that answer a delete or a signed URL.
+  They have exactly the fields of the plain dicts those routes returned, so the JSON of
+  a route does not change when it declares `response_model=IdRead`; only OpenAPI gets
+  the schema (and a wrong field can not slip into the body unnoticed).
+
+### Upgrade notes
+
+- Nothing is required. To use them: `response_model=IdRead` on the delete routes that
+  return `{"id": ...}` (the id must be an integer: a route that returns a UUID string
+  needs its own model) and `response_model=FileUrlRead` on the routes that return
+  `{"url": ...}`. Compare the body of a route before and after.
+
 ## 0.7.2
 
 A fix only, nothing to change in a service.
