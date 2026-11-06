@@ -5,17 +5,24 @@ A producer builds an event with its model and sends `event.to_payload()`; a cons
 validates what it receives with the same model. Before, each side had its own copy
 and the copies drifted apart (a field optional on one side, required on the other).
 
-Not here yet: the call event (`calls_events`), which carries the nested documents,
-disciplines and extra fields of a call and is still defined by each service.
+The call event (`calls_events`) carries the nested documents, disciplines and extra
+fields of a call; the lead event (`programme_leads`) is sent by the programmes-api and
+nobody consumes it yet.
 """
 
 from .schemas import (
     DLQ_SUFFIX,
     Actions,
     ApplicantNameSync,
+    CallDisciplineEvent,
+    CallEvent,
+    CallExtraFieldEvent,
+    CallRequestedDocumentEvent,
     EventPayload,
+    LeadEvent,
     ProgrammeUpdateEvent,
     Streams,
+    TuitionFeeEvent,
     UserDeleteEvent,
     UserSyncEvent,
     dlq_name,
@@ -25,10 +32,16 @@ from .schemas import (
 __all__ = [
     "Actions",
     "ApplicantNameSync",
+    "CallDisciplineEvent",
+    "CallEvent",
+    "CallExtraFieldEvent",
+    "CallRequestedDocumentEvent",
     "DLQ_SUFFIX",
     "EventPayload",
+    "LeadEvent",
     "ProgrammeUpdateEvent",
     "Streams",
+    "TuitionFeeEvent",
     "UserDeleteEvent",
     "UserSyncEvent",
     "dlq_name",
