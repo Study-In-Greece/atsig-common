@@ -2,6 +2,47 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.9.0
+
+Additive, except that the payload of `ProgrammeUpdateEvent` now carries more keys.
+
+### Added
+
+- `CallEvent` (with `CallRequestedDocumentEvent`, `CallDisciplineEvent`,
+  `CallExtraFieldEvent`) in `atsig_common.events`: the event of `calls_events`, defined
+  once. Before, the programmes-api built it from the API schema of a call and the
+  applications-api read it with another model. The fields that no consumer stores
+  (`created_at`, `updated_at`, `is_open`, `call_file_url`) are not part of it; they are
+  ignored if an older producer still sends them. `is_archived` is the call's own flag.
+- `ProgrammeUpdateEvent` is now a full snapshot of the programme: `admission_type`,
+  descriptions, contact data, languages, topics, study modes, tuition fees (nested
+  `TuitionFeeEvent`), `masters_id`, `is_featured`, timestamps, and the fields of one kind
+  of programme (`semesters`, `part_time`, `part_time_semesters`, `scholarship_offered`,
+  `master_type`, `bachelor_type`, `days`, `short_term_type`). All of them are optional,
+  so an event that is already in a stream, or sent by an older producer, still
+  validates. The enums of the programmes-api travel as plain strings.
+- `LeadEvent` and `Streams.LEADS` (`programme_leads`): a lead was saved. It carries the
+  name, email and phone of a visitor: the producer must cap the length of the stream
+  (`maxlen`), and a consumer must not log it. Nobody consumes it yet.
+
+### Changed
+
+- `ProgrammeUpdateEvent.is_archived` is the programme's own flag. The programmes-api used
+  to send `not is_available_for_application` (it was also `true` for a programme that
+  does not take applications through the system); the consumer now decides that from
+  `admission_type` (`internal` takes applications) and `is_archived`.
+- `ProgrammeUpdateEvent.to_payload()` has all the keys of the model, with `None` for what
+  the producer did not set. A consumer that validates with the model sees no difference.
+
+### Upgrade notes
+
+- Nothing breaks. Rollout order for the change of meaning of `is_archived`: the consumer
+  (applications-api) first, then the producer (programmes-api), then `manage.py resync
+  programmes` and `resync calls`. Until the resync, a consumer sees `admission_type` as
+  `None` on the rows it has and has to treat `is_archived` as it did before.
+- A producer of `CallEvent` sends `to_payload()`; a consumer validates with `CallEvent`
+  and logs `CallEvent.unexpected_keys(payload)` by name.
+
 ## 0.8.0
 
 Additive: nothing changes in a service until it uses the new schemas.
