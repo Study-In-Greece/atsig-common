@@ -30,11 +30,17 @@ Additive: new events, a new stream name set and a way to drop `UniCache` entries
 
 - `UniCache` takes its key templates from `uni_cache_keys`. The attributes
   (`DEPT_KEY`, `SCHOOL_KEY`, `UNI_HASH_KEY`) and the behaviour are the same.
+- `UniCache.CACHE_TTL` is 24 hours (was 1 hour). The uni-api drops the entries it
+  changes with `invalidate_uni_cache`, so the TTL only covers what the invalidation
+  misses (a failed Redis call, a change made outside the API such as the seeder or SQL).
 
 ### Upgrade notes
 
 - Nothing breaks. There is nothing to do in a service that does not use the new events
   or `invalidate_uni_cache`.
+- A service that uses `UniCache` now keeps a department for 24 hours instead of 1. Until
+  the uni-api produces the invalidation, a change of the uni-api reaches it up to 24
+  hours late: bump the services and deploy the uni-api together.
 
 ## 0.9.0
 

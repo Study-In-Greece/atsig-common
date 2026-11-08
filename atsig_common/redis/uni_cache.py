@@ -12,7 +12,10 @@ class UniCache:
         self.uni_api = uni_api
 
         # Templates
-        self.CACHE_TTL = 3600  # 1 hour
+        # The uni-api drops the entries it changes (`invalidate_uni_cache`), so the TTL
+        # is only the safety net for a failed invalidation, a change that bypassed the
+        # API (seeder, SQL) and a read that refilled the cache with a stale value.
+        self.CACHE_TTL = 24 * 3600  # 24 hours
         self.DEPT_KEY = DEPT_KEY
         self.SCHOOL_KEY = SCHOOL_KEY
         self.UNI_HASH_KEY = UNI_HASH_KEY
