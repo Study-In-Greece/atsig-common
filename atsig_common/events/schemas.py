@@ -25,6 +25,10 @@ class Streams:
     SIS_EXPORTS = "sis_export_events"
     # A lead (a visitor interested in a programme) was saved. Nobody consumes it yet.
     LEADS = "programme_leads"
+    # The academic catalogue of the uni-api, one stream per entity.
+    UNI_UNIVERSITIES = "uni_university_updates"
+    UNI_SCHOOLS = "uni_school_updates"
+    UNI_DEPARTMENTS = "uni_department_updates"
 
 
 class Actions:
@@ -264,3 +268,76 @@ class LeadEvent(EventPayload):
     message: str | None = None
     origin_country: str
     created_at: datetime | None = None
+
+
+class UniversityEvent(EventPayload):
+    """
+    A university changed (uni-api, stream `uni_university_updates`, action sync). A full
+    snapshot: `version` grows with every change (also a new image), and a consumer
+    ignores a version that is not newer than the one it stores.
+
+    `image_url` is the public URL as the API of the uni-api returns it (with the `?v=`
+    of the last change), so a consumer does not need the storage settings. `uni_type`
+    travels as the plain string of the enum ("1" university, "2" institution).
+    """
+
+    id: int
+    name_gr: str
+    name_en: str
+    version: int
+
+    description_gr: str | None = None
+    description_en: str | None = None
+    status: bool = True
+    uni_type: str | None = None
+    establish_date: date | None = None
+    website: str | None = None
+    country: str | None = None
+    image: str | None = None
+    image_url: str | None = None
+
+
+class SchoolEvent(EventPayload):
+    """A school changed (uni-api, stream `uni_school_updates`, action sync). A full snapshot."""
+
+    id: int
+    university_id: int
+    name_gr: str
+    name_en: str
+    version: int
+
+    status: bool = True
+    has_dep: bool = True
+    minedu_code: int | None = None
+
+
+class DepartmentEvent(EventPayload):
+    """
+    A department changed (uni-api, stream `uni_department_updates`, action sync). A full
+    snapshot. `school_id` and `university_id` are nullable in the uni-api; the relations
+    are plain ids here, a consumer must not expect the school or the university to
+    exist already (the events of the three streams arrive in any order).
+    """
+
+    id: int
+    name_gr: str
+    name_en: str
+    version: int
+
+    school_id: int | None = None
+    university_id: int | None = None
+    status: bool = True
+    minedu_code: int | None = None
+    city: str | None = None
+    website: str | None = None
+
+
+class UniDeleteEvent(EventPayload):
+    """
+    A university, a school or a department was deleted (uni-api, action delete on the
+    stream of the entity). `version` is the last version of the row plus one: a consumer
+    deletes its copy only if it stores an older version.
+    """
+
+    id: int
+    version: int

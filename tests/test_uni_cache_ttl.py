@@ -64,3 +64,7 @@ async def test_every_cached_key_has_a_ttl():
 
     assert redis.data, "nothing was cached"
     assert all(redis.ttl[key] == cache.CACHE_TTL for key in redis.data), redis.ttl
+
+
+def test_default_ttl_is_24_hours():
+    assert UniCache(DictRedis(), StubUniApi()).CACHE_TTL == 24 * 3600

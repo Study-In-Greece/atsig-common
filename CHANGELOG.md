@@ -2,6 +2,46 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.10.0
+
+Additive: new events, a new stream name set and a way to drop `UniCache` entries.
+
+### Added
+
+- `UniversityEvent`, `SchoolEvent`, `DepartmentEvent` and `UniDeleteEvent` in
+  `atsig_common.events`, and `Streams.UNI_UNIVERSITIES` (`uni_university_updates`),
+  `Streams.UNI_SCHOOLS` (`uni_school_updates`), `Streams.UNI_DEPARTMENTS`
+  (`uni_department_updates`): the academic catalogue of the uni-api as full snapshots,
+  one stream per entity. `version` grows with every change and a consumer ignores a
+  version that is not newer than the one it stores; `action=delete` carries a
+  `UniDeleteEvent` (the last version plus one). The relations are plain ids (the three
+  streams arrive in any order, a consumer must not expect the parent to exist).
+  `UniversityEvent.image_url` is the public URL as the uni-api returns it. Nobody
+  produces or consumes them yet; the uni-api produces, the programmes-api consumes,
+  and the statistics-api will.
+- `atsig_common.redis.uni_cache_keys`: the key templates of the `UniCache` (`DEPT_KEY`,
+  `SCHOOL_KEY`, `UNI_HASH_KEY`) and `invalidate_uni_cache(redis, department_ids=,
+  school_ids=, university_ids=)`, which drops the entries that a change of the uni-api
+  made stale. It never raises (a failure is logged by the type of the error, the entries
+  expire with their TTL) and does not import the `UniAPI` client, so the uni-api can use
+  it without the `api_client` extra.
+
+### Changed
+
+- `UniCache` takes its key templates from `uni_cache_keys`. The attributes
+  (`DEPT_KEY`, `SCHOOL_KEY`, `UNI_HASH_KEY`) and the behaviour are the same.
+- `UniCache.CACHE_TTL` is 24 hours (was 1 hour). The uni-api drops the entries it
+  changes with `invalidate_uni_cache`, so the TTL only covers what the invalidation
+  misses (a failed Redis call, a change made outside the API such as the seeder or SQL).
+
+### Upgrade notes
+
+- Nothing breaks. There is nothing to do in a service that does not use the new events
+  or `invalidate_uni_cache`.
+- A service that uses `UniCache` now keeps a department for 24 hours instead of 1. Until
+  the uni-api produces the invalidation, a change of the uni-api reaches it up to 24
+  hours late: bump the services and deploy the uni-api together.
+
 ## 0.9.0
 
 Additive, except that the payload of `ProgrammeUpdateEvent` now carries more keys.
