@@ -9,9 +9,13 @@ from atsig_common.events import (
     Actions,
     ApplicantNameSync,
     CallEvent,
+    DepartmentEvent,
     LeadEvent,
     ProgrammeUpdateEvent,
+    SchoolEvent,
     Streams,
+    UniDeleteEvent,
+    UniversityEvent,
     UserDeleteEvent,
     UserSyncEvent,
     validation_problems,
@@ -360,3 +364,69 @@ def test_the_lead_event_and_its_stream():
     json.dumps(event.to_payload())
     with pytest.raises(ValidationError):
         LeadEvent.model_validate({k: v for k, v in wire.items() if k != "programme_id"})
+
+
+def test_the_uni_streams_are_one_per_entity():
+    assert Streams.UNI_UNIVERSITIES == "uni_university_updates"
+    assert Streams.UNI_SCHOOLS == "uni_school_updates"
+    assert Streams.UNI_DEPARTMENTS == "uni_department_updates"
+
+
+def test_the_university_event_round_trips_through_its_payload():
+    event = UniversityEvent(
+        id=1,
+        name_gr="Πανεπιστήμιο",
+        name_en="University",
+        version=3,
+        uni_type="1",
+        establish_date="1990-01-01",
+        website="https://uni.example",
+        image="universities/1.png",
+        image_url="https://cdn.example/universities/1.png?v=1",
+    )
+
+    payload = event.to_payload()
+    json.dumps(payload)
+
+    assert UniversityEvent.model_validate(payload) == event
+    assert payload["establish_date"] == "1990-01-01"
+    assert UniversityEvent.unexpected_keys(payload) == []
+
+
+def test_the_school_and_department_events_keep_the_relations_as_ids():
+    school = SchoolEvent(
+        id=2, university_id=1, name_gr="Σχολή", name_en="School", version=1
+    )
+    department = DepartmentEvent.model_validate(
+        {"id": 3, "name_gr": "Τμήμα", "name_en": "Dept", "version": 1, "school_id": 2}
+    )
+
+    assert school.status is True and school.minedu_code is None
+    assert department.school_id == 2
+    assert department.university_id is None  # nullable in the uni-api
+
+
+@pytest.mark.parametrize(
+    ("model", "payload", "missing"),
+    [
+        (UniversityEvent, {"id": 1, "name_gr": "a", "name_en": "b"}, "version"),
+        (
+            SchoolEvent,
+            {"id": 1, "name_gr": "a", "name_en": "b", "version": 1},
+            "university_id",
+        ),
+        (DepartmentEvent, {"id": 1, "name_gr": "a", "version": 1}, "name_en"),
+        (UniDeleteEvent, {"id": 1}, "version"),
+    ],
+)
+def test_the_uni_events_need_the_fields_the_consumers_rely_on(model, payload, missing):
+    with pytest.raises(ValidationError) as caught:
+        model.model_validate(payload)
+
+    assert validation_problems(caught.value) == f"{missing} (missing)"
+
+
+def test_the_uni_delete_event_carries_only_the_id_and_the_version():
+    event = UniDeleteEvent.model_validate({"id": 4, "version": 7, "name_en": "ignored"})
+
+    assert event.to_payload() == {"id": 4, "version": 7}

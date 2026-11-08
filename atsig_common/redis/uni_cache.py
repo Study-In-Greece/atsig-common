@@ -1,6 +1,7 @@
 from ..api_client.clients.uni_api import UniAPI
 from ..logger.config import get_logger
 from .manager import RedisManager
+from .uni_cache_keys import DEPT_KEY, SCHOOL_KEY, UNI_HASH_KEY
 
 logger = get_logger("atsig_common.redis.uni_cache")
 
@@ -12,9 +13,9 @@ class UniCache:
 
         # Templates
         self.CACHE_TTL = 3600  # 1 hour
-        self.DEPT_KEY = "department:{}"
-        self.SCHOOL_KEY = "school_departments:{}"
-        self.UNI_HASH_KEY = "department_university_map"
+        self.DEPT_KEY = DEPT_KEY
+        self.SCHOOL_KEY = SCHOOL_KEY
+        self.UNI_HASH_KEY = UNI_HASH_KEY
 
     async def update_department_university_map(self, departments: list[dict]):
         if not departments:

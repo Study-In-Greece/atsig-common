@@ -8,6 +8,9 @@ and the copies drifted apart (a field optional on one side, required on the othe
 The call event (`calls_events`) carries the nested documents, disciplines and extra
 fields of a call; the lead event (`programme_leads`) is sent by the programmes-api and
 nobody consumes it yet.
+
+The academic catalogue of the uni-api (universities, schools, departments) travels as
+full snapshots, one stream per entity, with `UniDeleteEvent` for a deletion.
 """
 
 from .schemas import (
@@ -18,11 +21,15 @@ from .schemas import (
     CallEvent,
     CallExtraFieldEvent,
     CallRequestedDocumentEvent,
+    DepartmentEvent,
     EventPayload,
     LeadEvent,
     ProgrammeUpdateEvent,
+    SchoolEvent,
     Streams,
     TuitionFeeEvent,
+    UniDeleteEvent,
+    UniversityEvent,
     UserDeleteEvent,
     UserSyncEvent,
     dlq_name,
@@ -37,11 +44,15 @@ __all__ = [
     "CallExtraFieldEvent",
     "CallRequestedDocumentEvent",
     "DLQ_SUFFIX",
+    "DepartmentEvent",
     "EventPayload",
     "LeadEvent",
     "ProgrammeUpdateEvent",
+    "SchoolEvent",
     "Streams",
     "TuitionFeeEvent",
+    "UniDeleteEvent",
+    "UniversityEvent",
     "UserDeleteEvent",
     "UserSyncEvent",
     "dlq_name",
