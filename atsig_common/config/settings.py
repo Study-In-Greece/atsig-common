@@ -58,6 +58,10 @@ class BaseAtsigSettings(BaseSettings):
     # Audience: needs an audience mapper on the Keycloak client, otherwise tokens
     # carry `aud: account`.
     KEYCLOAK_EXPECTED_AUDIENCE: str | None = None
+    # The admin client (users and groups), for the services that create accounts
+    # (`atsig_common.keycloak_admin`). Unset in the others.
+    KEYCLOAK_ADMIN_CLIENT_ID: str | None = None
+    KEYCLOAK_ADMIN_CLIENT_SECRET: str | None = None
 
     # --- 4. REDIS (Optional for shared base) ---
     REDIS_SERVER: str | None = None

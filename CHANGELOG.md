@@ -2,6 +2,38 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.11.0
+
+Additive: the Keycloak admin side of the users, shared by the services that create
+accounts. Nothing existing changes.
+
+### Added
+
+- `atsig_common.keycloak_admin` (needs the `auth` extra): `KeycloakUserService(admin)`
+  (moved from the profiles-api, with the same behaviour: async wrappers that take turns
+  in a thread, `adelete_user` with retries, `get_user_by_id_with_retry`, error messages
+  without the Keycloak answer), `create_keycloak_admin(settings)`, and the schemas
+  `KeycloakUserCreate` / `KeycloakUserUpdate`.
+- No password anywhere: `KeycloakUserCreate` has no `password`. A new account is created
+  with the required actions `UPDATE_PASSWORD` and `UPDATE_PROFILE`, and
+  `invite_user` / `ainvite_user` ask Keycloak to email the user the link
+  (`send_update_account`, lifespan 3 days). The invitation never raises (it returns
+  False): the account exists and can be invited again. The realm needs an SMTP server.
+- `NewIdentityTracker`: keeps the Keycloak accounts that one request created and removes
+  exactly those when the request fails (`discard`, `discard_all`,
+  `commit_or_discard(session)`), the logic that `UserService` of the profiles-api had.
+- `BaseAtsigSettings.KEYCLOAK_ADMIN_CLIENT_ID` / `KEYCLOAK_ADMIN_CLIENT_SECRET`
+  (optional, None). A service that creates accounts must set them.
+
+### Upgrade notes
+
+- Nothing breaks. The profiles-api keeps its own copy until it moves to
+  `atsig_common.keycloak_admin`, which removes the passwords from its create routes.
+- A service that declares `KEYCLOAK_ADMIN_CLIENT_ID: str` in its own `Settings` (the
+  profiles-api) keeps it required.
+- A worker that creates accounts (the applications-api consumer creates the evaluators)
+  needs the two settings too.
+
 ## 0.10.0
 
 Additive: new events, a new stream name set and a way to drop `UniCache` entries.
