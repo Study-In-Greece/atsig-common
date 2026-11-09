@@ -2,6 +2,39 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.12.0
+
+Additive: the identity layer of the users, shared by the services that keep accounts
+(the profiles-api today, the applications-api next). Nothing existing changes.
+
+### Added
+
+- `atsig_common.users` (needs the `db`, `fastapi`, `redis` and `auth` extras):
+  - `UserMixin`: the columns of the `user` table (`uuid` = the id in Keycloak, `email`
+    unique and indexed, names, `is_active`, `group_path`). A service declares
+    `class User(TimestampBase, UserMixin)` with its own relationships; the table is the
+    same as before (`alembic revision --autogenerate` stays empty).
+  - `UserCreate` (no password), `UserLocalCreate`, `UserUpdate`, `UserRead`, `UserBase`.
+  - `UserService(user_model, session, kc_service, producer)`: `create_user` (Keycloak
+    first, then the local row, a failed flush removes ONLY an account this request
+    created), `update_user`, `delete_user` (database first, Keycloak and the event after
+    the commit), `sync_local_user` (JIT), `create_local_user_only`,
+    `update_local_user_only`, `get_user_by_email`, `read_users_by_uuids`, and `commit()`:
+    commits, removes the new accounts if that fails, and only after a successful commit
+    asks Keycloak to email each new account its invitation. The `user_events` stream
+    gets `UserSyncEvent` / `UserDeleteEvent` from here (`emit_safe`).
+
+### Fixed
+
+- `read_users_by_uuids` filtered on `User.id`, which the model does not have; it now
+  filters on `uuid`.
+
+### Upgrade notes
+
+- Nothing breaks. The profiles-api moves to it in its own change.
+- A service subclasses `UserService` only when it needs more (a thin subclass that passes
+  its `User` model is enough).
+
 ## 0.11.0
 
 Additive: the Keycloak admin side of the users, shared by the services that create
