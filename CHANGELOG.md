@@ -2,6 +2,38 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.13.0
+
+**Breaking.** The applicants, the agents and the evaluators moved from the profiles-api
+to the applications-api, so the client of the profiles-api and the event that kept the
+names of the applications in sync are gone. No service uses them any more (the
+applications-api stopped when the users moved there, the profiles-api when its applicant
+and agent code was removed).
+
+### Removed
+
+- `UsersAPI` (`atsig_common.api_client.clients.users_api`), `APIClientFactory.get_users_api`
+  and `PROFILES_API_URL` in `APIClientSettingsProto`.
+- `ApplicantNameSync` and `Streams.APPLICANT_NAMES` (`update_applicant_applications`):
+  nobody produces or consumes the event any more. The names of an applicant are read
+  from its user row.
+
+### Changed
+
+- The documentation of `UserSyncEvent` and `UserDeleteEvent` says that two services
+  produce them (the applications-api for applicants, agents and evaluators, the
+  profiles-api for secretaries). The events themselves are the same.
+- `build_core(settings, api_clients=True)` needs only `UNI_API_URL`.
+
+### Upgrade notes
+
+- A service must not import `UsersAPI` or `ApplicantNameSync`, nor call
+  `core.api_factory.get_users_api()` (the applications-api and the profiles-api no longer
+  do). Check with `grep -rn "UsersAPI\|get_users_api\|ApplicantNameSync\|APPLICANT_NAMES"`.
+- `PROFILES_API_URL` can be removed from the settings and the stacks of the services
+  that still carry it; it is ignored.
+- The Redis stream `update_applicant_applications` and its `_dlq` can be deleted.
+
 ## 0.12.0
 
 Additive: the identity layer of the users, shared by the services that keep accounts

@@ -28,7 +28,6 @@ def make_settings(**overrides):
         "R2_SECRET_ACCESS_KEY": "s",
         "R2_PRIVATE_BUCKET": "private",
         "R2_PUBLIC_BUCKET": None,
-        "PROFILES_API_URL": "http://profiles",
         "UNI_API_URL": "http://uni",
     }
     return SimpleNamespace(**{**values, **overrides})
@@ -74,7 +73,7 @@ def test_build_core_wires_everything_from_the_settings():
 
     assert core.redis.host == "redis" and core.redis.port == 6379
     assert core.storage.r2_private_bucket == "private"
-    assert core.api_factory.get_users_api().base_url == "http://profiles"
+    assert core.api_factory.get_uni_api().base_url == "http://uni"
     assert core.token_manager.keycloak_client is core.keycloak
     assert core.oauth2_scheme.auto_error is True
     assert core.optional_oauth2_scheme.auto_error is False

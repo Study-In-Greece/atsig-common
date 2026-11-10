@@ -2,7 +2,6 @@ from typing import Protocol
 
 from ..auth.service_token import ServiceTokenManager
 from .clients.uni_api import UniAPI
-from .clients.users_api import UsersAPI
 from .http_manager import HttpClientManager
 
 
@@ -16,7 +15,6 @@ class APIClientSettingsProto(Protocol):
     """
 
     UNI_API_URL: str | None = None
-    PROFILES_API_URL: str | None = None
 
 
 class APIClientFactory:
@@ -76,20 +74,3 @@ class APIClientFactory:
         """
         base_url = self._get_url("UNI_API_URL")
         return UniAPI(base_url=base_url, http_manager=self.http_manager)
-
-    def get_users_api(self) -> UsersAPI:
-        """
-        Creates and returns a configured instance of UsersAPI.
-
-        This client is automatically injected with the ServiceTokenManager
-        to handle authenticated requests.
-
-        Returns:
-            UsersAPI: The client for User Profile services.
-        """
-        base_url = self._get_url("PROFILES_API_URL")
-        return UsersAPI(
-            base_url=base_url,
-            http_manager=self.http_manager,
-            token_manager=self.token_manager,
-        )
