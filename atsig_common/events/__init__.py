@@ -16,7 +16,6 @@ full snapshots, one stream per entity, with `UniDeleteEvent` for a deletion.
 from .schemas import (
     DLQ_SUFFIX,
     Actions,
-    ApplicantNameSync,
     CallDisciplineEvent,
     CallEvent,
     CallExtraFieldEvent,
@@ -38,7 +37,6 @@ from .schemas import (
 
 __all__ = [
     "Actions",
-    "ApplicantNameSync",
     "CallDisciplineEvent",
     "CallEvent",
     "CallExtraFieldEvent",

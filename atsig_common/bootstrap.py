@@ -129,8 +129,8 @@ def build_core(
         redis: Build the Redis connection (needs REDIS_SERVER in the settings).
         storage: Build the R2/S3 storage (needs the R2_* settings; both buckets are
             passed, a bucket that is not configured fails when it is first used).
-        api_clients: Build the factory of the clients for profiles-api and uni-api
-            (needs PROFILES_API_URL and/or UNI_API_URL in the settings).
+        api_clients: Build the factory of the clients for other services (the uni-api;
+            needs UNI_API_URL in the settings).
     """
     keycloak = create_keycloak_client(settings)
     token_manager = create_service_token_manager(keycloak)

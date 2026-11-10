@@ -5,7 +5,6 @@ import httpx
 import pytest
 
 from atsig_common.api_client.base import BaseAPI
-from atsig_common.api_client.clients.users_api import UsersAPI
 from atsig_common.auth.service_token import ServiceTokenManager
 from atsig_common.email.client import AsyncEmailClient
 
@@ -68,15 +67,6 @@ class Http:
 
     async def init_client(self):
         return None
-
-
-async def test_users_api_sends_the_service_token_without_blocking():
-    http = Http()
-    api = UsersAPI("http://profiles", ServiceTokenManager(FakeKeycloak()), http)
-
-    await api.get_applicant("u1")
-
-    assert http.requests[0].headers["Authorization"] == "Bearer token-1"
 
 
 @pytest.mark.parametrize("is_async", [False, True])

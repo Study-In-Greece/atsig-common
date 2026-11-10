@@ -1,14 +1,12 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated, Any
-from uuid import UUID
+from typing import Any
 
 from pydantic import (
     AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
-    StringConstraints,
     ValidationError,
 )
 
@@ -20,7 +18,6 @@ class Streams:
 
     CALLS = "calls_events"
     PROGRAMMES = "programme_updates"
-    APPLICANT_NAMES = "update_applicant_applications"
     USERS = "user_events"
     SIS_EXPORTS = "sis_export_events"
     # A lead (a visitor interested in a programme) was saved. Nobody consumes it yet.
@@ -86,23 +83,9 @@ class EventPayload(BaseModel):
         return self.model_dump(mode="json")
 
 
-Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
-class ApplicantNameSync(EventPayload):
-    """
-    The names of an applicant changed (profiles-api, stream `update_applicant_applications`).
-    The applications-api updates the names on every application of the applicant, and
-    nothing else: this event can not change any other field.
-    """
-
-    applicant_id: UUID
-    applicant_first_name: Name
-    applicant_last_name: Name
-
-
 class UserSyncEvent(EventPayload):
-    """A user was created or changed (profiles-api, stream `user_events`, action sync)."""
+    """A user was created or changed (applications-api for applicants, agents and
+    evaluators, profiles-api for secretaries; stream `user_events`, action sync)."""
 
     uuid: str = Field(validation_alias=AliasChoices("uuid", "id"))
     email: str | None = None
@@ -111,7 +94,8 @@ class UserSyncEvent(EventPayload):
 
 
 class UserDeleteEvent(EventPayload):
-    """A user was deleted (profiles-api, stream `user_events`, action delete)."""
+    """A user was deleted (applications-api or profiles-api; stream `user_events`,
+    action delete)."""
 
     uuid: str = Field(validation_alias=AliasChoices("uuid", "id"))
 
