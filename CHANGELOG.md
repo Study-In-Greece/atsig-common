@@ -2,6 +2,21 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.14.0
+
+### Added
+
+- `atsig_common.turnstile.verify_turnstile(token, secret, remote_ip=, ...)`: server-side
+  check of a Cloudflare Turnstile token for public forms (needs the `http` extra). An empty
+  secret turns the check off (local development). A missing or rejected token raises
+  `BadRequestError`; Cloudflare unreachable or a bad answer raises `ServiceUnavailableError`
+  (fails closed). The token is never logged.
+
+### Upgrade notes
+
+- No existing API changes. A service that wants the check declares
+  `TURNSTILE_SECRET: str | None = None` in its Settings and calls `verify_turnstile`.
+
 ## 0.13.0
 
 **Breaking.** The applicants, the agents and the evaluators moved from the profiles-api
