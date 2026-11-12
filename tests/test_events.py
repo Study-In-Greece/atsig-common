@@ -6,6 +6,8 @@ from pydantic import ValidationError
 
 from atsig_common.events import (
     Actions,
+    ApplicationDeleteEvent,
+    ApplicationEvent,
     CallEvent,
     DepartmentEvent,
     LeadEvent,
@@ -387,3 +389,71 @@ def test_the_uni_delete_event_carries_only_the_id_and_the_version():
     event = UniDeleteEvent.model_validate({"id": 4, "version": 7, "name_en": "ignored"})
 
     assert event.to_payload() == {"id": 4, "version": 7}
+
+
+def test_the_application_stream_name():
+    assert Streams.APPLICATIONS == "application_updates"
+
+
+def _application_wire():
+    return {
+        "id": 7,
+        "version": 3,
+        "applicant_id": UUID_1,
+        "call_id": 12,
+        "programme_id": 5,
+        "application_type": "Master",
+        "status": "finalized",
+        "secretary_status": "pending",
+        "applicant_status": "pending",
+        "created_date": "2026-10-01",
+        "submission_date": "2026-10-03",
+        "gender": "Female",
+        "birth_year": 1998,
+        "nationalities": ["GR", "CY"],
+        "education": [
+            {
+                "degree_type": "BSc",
+                "country": "Greece",
+                "institution": "NTUA",
+                "graduation_year": 2020,
+            }
+        ],
+        "languages": [{"language": "English", "title": "IELTS"}],
+        "work_experience_months": 14,
+        "work_experience_count": 2,
+    }
+
+
+def test_application_event_validates_and_is_json_compatible():
+    event = ApplicationEvent.model_validate(_application_wire())
+
+    assert event.agent_id is None and event.is_agent_submission is False
+    assert event.education[0].graduation_year == 2020
+    payload = event.to_payload()
+    json.dumps(payload)
+    assert payload["submission_date"] == "2026-10-03"
+
+
+def test_application_event_requires_the_identity_and_the_version():
+    for missing in ("id", "version", "applicant_id", "call_id", "status"):
+        wire = {k: v for k, v in _application_wire().items() if k != missing}
+        with pytest.raises(ValidationError):
+            ApplicationEvent.model_validate(wire)
+
+
+def test_application_event_ignores_unknown_keys_and_has_no_personal_fields():
+    wire = {**_application_wire(), "email": "a@x.gr", "id_number": "AB123"}
+
+    event = ApplicationEvent.model_validate(wire)
+
+    assert ApplicationEvent.unexpected_keys(wire) == ["email", "id_number"]
+    dumped = event.to_payload()
+    for field in ("email", "first_name", "last_name", "phone", "id_number", "cv"):
+        assert field not in dumped
+        assert field not in ApplicationEvent.model_fields
+
+
+def test_application_delete_event():
+    event = ApplicationDeleteEvent.model_validate({"id": 7, "version": 4})
+    assert event.to_payload() == {"id": 7, "version": 4}

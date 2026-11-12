@@ -2,6 +2,27 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.14.0
+
+New public API, backward-compatible. The statistics-api (new service) reads the
+applications from a stream, so the applications-api needs an event for them.
+
+### Added
+
+- `Streams.APPLICATIONS` (`application_updates`).
+- `ApplicationEvent`: a full snapshot of an application for statistics, with `version`.
+  It carries the ids (`applicant_id`, `call_id`, `programme_id`, `agent_id`), the
+  statuses, the dates, the attendance mode, the UTM source/medium/campaign and a few
+  demographics of the applicant (gender, `birth_year`, nationalities, degrees as
+  `ApplicationEducationEvent`, language certificates as `ApplicationLanguageEvent`,
+  months and count of work experience). No name, email, phone, id number, files or
+  free text.
+- `ApplicationDeleteEvent {id, version}` for `Actions.DELETE` (version = last + 1).
+
+### Upgrade notes
+
+- Nothing changes for the services that do not use the new events: bump only.
+
 ## 0.13.0
 
 **Breaking.** The applicants, the agents and the evaluators moved from the profiles-api

@@ -26,6 +26,9 @@ class Streams:
     UNI_UNIVERSITIES = "uni_university_updates"
     UNI_SCHOOLS = "uni_school_updates"
     UNI_DEPARTMENTS = "uni_department_updates"
+    # An application was created, changed or deleted (applications-api). Statistics only:
+    # the event carries no personal data.
+    APPLICATIONS = "application_updates"
 
 
 class Actions:
@@ -321,6 +324,78 @@ class UniDeleteEvent(EventPayload):
     A university, a school or a department was deleted (uni-api, action delete on the
     stream of the entity). `version` is the last version of the row plus one: a consumer
     deletes its copy only if it stores an older version.
+    """
+
+    id: int
+    version: int
+
+
+class ApplicationEducationEvent(EventPayload):
+    """One degree of the applicant (no title, grade or file)."""
+
+    degree_type: str
+    country: str
+    institution: str
+    graduation_year: int | None = None
+
+
+class ApplicationLanguageEvent(EventPayload):
+    """One language certificate of the applicant (no score or file)."""
+
+    language: str
+    title: str | None = None
+
+
+class ApplicationEvent(EventPayload):
+    """
+    An application was created or changed (applications-api, stream `application_updates`,
+    action sync). A full snapshot for statistics: `version` grows with every change of
+    the application row, and a consumer ignores a version that is not newer than the one
+    it stores.
+
+    It carries NO personal data: no name, email, phone, id number, files or free text.
+    The applicant is only the `applicant_id` (the uuid) and a few demographics, taken
+    when the application changed. A later change of the profile alone sends nothing.
+    Whether the applicant is new or returning is up to the consumer, from `applicant_id`.
+
+    The enums (`application_type`, the three statuses, `selected_attendance_mode`,
+    `degree_type`) travel as plain strings, like in the other events.
+    """
+
+    id: int
+    version: int
+    applicant_id: str
+    call_id: int
+    programme_id: int | None = None
+    application_type: str
+    status: str
+    secretary_status: str
+    applicant_status: str
+    created_date: date | None = None
+    submission_date: date | None = None
+    selected_attendance_mode: str | None = None
+    is_agent_submission: bool = False
+    agent_id: str | None = None
+    utm_source: str | None = None
+    utm_medium: str | None = None
+    utm_campaign: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    # The applicant at the time of the change
+    gender: str | None = None
+    birth_year: int | None = None
+    nationalities: list[str] = []
+    education: list[ApplicationEducationEvent] = []
+    languages: list[ApplicationLanguageEvent] = []
+    work_experience_months: int = 0
+    work_experience_count: int = 0
+
+
+class ApplicationDeleteEvent(EventPayload):
+    """
+    An application was deleted (applications-api, stream `application_updates`, action
+    delete). `version` is the last version of the row plus one: a consumer deletes its
+    copy only if it stores an older version.
     """
 
     id: int
