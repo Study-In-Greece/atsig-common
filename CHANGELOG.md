@@ -2,6 +2,24 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.15.0
+
+### Added
+
+- `atsig_common.turnstile.make_require_turnstile(get_secret)`: builds the FastAPI dependency
+  that checks the Turnstile token of a public route (needs the `fastapi` extra). The form
+  sends the token in the `X-Turnstile-Token` header (`TURNSTILE_HEADER`); the route declares
+  the check like it declares its authentication:
+  `dependencies=[Depends(require_turnstile)]`. The IP of the caller (first address of
+  `X-Forwarded-For`, else the connection) goes to Cloudflare as `remoteip`. An empty secret
+  turns the check off. `get_secret` is called on every request.
+
+### Upgrade notes
+
+- No existing API changes: `verify_turnstile` stays as it is. A service that moves the check
+  from its service layer to a dependency also removes the `turnstile_token` field of its
+  schemas, and its form sends the header instead.
+
 ## 0.14.0
 
 ### Added

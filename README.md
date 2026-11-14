@@ -19,7 +19,7 @@ Shared utilities package for the ATSIG (Study In Greece) microservices — `prog
 - **Email** (`atsig_common.email`) — email client with template + bulk send support (`asend_email` for async code), and `make_get_email_client`.
 - **Time** (`atsig_common.time`) — `today_athens()`: the date in Greece, whatever the time zone of the container is (containers run in UTC).
 - **API client** (`atsig_common.api_client`) — async HTTP client factory for service-to-service calls (errors of the other service become `UpstreamError`, a 502).
-- **Turnstile** (`atsig_common.turnstile`) — `verify_turnstile`: server-side check of a Cloudflare Turnstile token for public forms (off when the secret is empty).
+- **Turnstile** (`atsig_common.turnstile`) — `verify_turnstile` and the dependency `make_require_turnstile`: server-side check of a Cloudflare Turnstile token (header `X-Turnstile-Token`) for public forms (off when the secret is empty).
 - **Exceptions** (`atsig_common.exceptions`) — shared error types used consistently across services.
 
 Installed as an optional-extras package — each service pulls in only what it needs, e.g.:
