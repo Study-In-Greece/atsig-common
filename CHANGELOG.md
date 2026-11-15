@@ -2,6 +2,19 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.16.0
+
+### Added
+
+- `Streams.CRM_EXPORTS` (`crm_exports`): the stream on which the applications-api tells its
+  CRM integrations (e.g. HubSpot) that an application was finalized. Its DLQ is
+  `crm_exports_dlq`, like every other stream.
+
+### Upgrade notes
+
+- No existing API changes. Only the services that produce or consume the stream need it; the
+  others only move to the new tag.
+
 ## 0.15.0
 
 ### Added
