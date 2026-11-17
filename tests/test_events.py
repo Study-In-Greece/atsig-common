@@ -29,6 +29,8 @@ def test_the_stream_names_are_the_ones_the_services_use_today():
     assert Streams.PROGRAMMES == "programme_updates"
     assert Streams.USERS == "user_events"
     assert Streams.SIS_EXPORTS == "sis_export_events"
+    assert Streams.LEADS == "programme_leads"
+    assert Streams.CRM_EXPORTS == "crm_exports"
     assert (Actions.SYNC, Actions.DELETE) == ("sync", "delete")
 
 

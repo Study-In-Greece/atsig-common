@@ -20,8 +20,10 @@ class Streams:
     PROGRAMMES = "programme_updates"
     USERS = "user_events"
     SIS_EXPORTS = "sis_export_events"
-    # A lead (a visitor interested in a programme) was saved. Nobody consumes it yet.
+    # A lead (a visitor interested in a programme) was saved.
     LEADS = "programme_leads"
+    # An application was finalized and the CRM integrations have to be told about it.
+    CRM_EXPORTS = "crm_exports"
     # The academic catalogue of the uni-api, one stream per entity.
     UNI_UNIVERSITIES = "uni_university_updates"
     UNI_SCHOOLS = "uni_school_updates"

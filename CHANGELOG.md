@@ -2,7 +2,7 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
-## 0.14.0
+## 0.17.0
 
 New public API, backward-compatible. The statistics-api (new service) reads the
 applications from a stream, so the applications-api needs an event for them.
@@ -22,6 +22,52 @@ applications from a stream, so the applications-api needs an event for them.
 ### Upgrade notes
 
 - Nothing changes for the services that do not use the new events: bump only.
+
+## 0.16.0
+
+### Added
+
+- `Streams.CRM_EXPORTS` (`crm_exports`): the stream on which the applications-api tells its
+  CRM integrations (e.g. HubSpot) that an application was finalized. Its DLQ is
+  `crm_exports_dlq`, like every other stream.
+
+### Upgrade notes
+
+- No existing API changes. Only the services that produce or consume the stream need it; the
+  others only move to the new tag.
+
+## 0.15.0
+
+### Added
+
+- `atsig_common.turnstile.make_require_turnstile(get_secret)`: builds the FastAPI dependency
+  that checks the Turnstile token of a public route (needs the `fastapi` extra). The form
+  sends the token in the `X-Turnstile-Token` header (`TURNSTILE_HEADER`); the route declares
+  the check like it declares its authentication:
+  `dependencies=[Depends(require_turnstile)]`. The IP of the caller (first address of
+  `X-Forwarded-For`, else the connection) goes to Cloudflare as `remoteip`. An empty secret
+  turns the check off. `get_secret` is called on every request.
+
+### Upgrade notes
+
+- No existing API changes: `verify_turnstile` stays as it is. A service that moves the check
+  from its service layer to a dependency also removes the `turnstile_token` field of its
+  schemas, and its form sends the header instead.
+
+## 0.14.0
+
+### Added
+
+- `atsig_common.turnstile.verify_turnstile(token, secret, remote_ip=, ...)`: server-side
+  check of a Cloudflare Turnstile token for public forms (needs the `http` extra). An empty
+  secret turns the check off (local development). A missing or rejected token raises
+  `BadRequestError`; Cloudflare unreachable or a bad answer raises `ServiceUnavailableError`
+  (fails closed). The token is never logged.
+
+### Upgrade notes
+
+- No existing API changes. A service that wants the check declares
+  `TURNSTILE_SECRET: str | None = None` in its Settings and calls `verify_turnstile`.
 
 ## 0.13.0
 
@@ -139,7 +185,7 @@ Additive: new events, a new stream name set and a way to drop `UniCache` entries
   and the statistics-api will.
 - `atsig_common.redis.uni_cache_keys`: the key templates of the `UniCache` (`DEPT_KEY`,
   `SCHOOL_KEY`, `UNI_HASH_KEY`) and `invalidate_uni_cache(redis, department_ids=,
-  school_ids=, university_ids=)`, which drops the entries that a change of the uni-api
+school_ids=, university_ids=)`, which drops the entries that a change of the uni-api
   made stale. It never raises (a failure is logged by the type of the error, the entries
   expire with their TTL) and does not import the `UniAPI` client, so the uni-api can use
   it without the `api_client` extra.
@@ -196,7 +242,7 @@ Additive, except that the payload of `ProgrammeUpdateEvent` now carries more key
 
 - Nothing breaks. Rollout order for the change of meaning of `is_archived`: the consumer
   (applications-api) first, then the producer (programmes-api), then `manage.py resync
-  programmes` and `resync calls`. Until the resync, a consumer sees `admission_type` as
+programmes` and `resync calls`. Until the resync, a consumer sees `admission_type` as
   `None` on the rows it has and has to treat `is_archived` as it did before.
 - A producer of `CallEvent` sends `to_payload()`; a consumer validates with `CallEvent`
   and logs `CallEvent.unexpected_keys(payload)` by name.
