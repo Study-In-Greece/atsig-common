@@ -2,6 +2,36 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.18.0
+
+New public API, backward-compatible. A producer that sends an event for every change of a
+model no longer needs a "notify" call at each place that changes the model.
+
+### Added
+
+- `atsig_common.events.tracking` (needs the `db` extra, not imported by
+  `atsig_common.events`): `ChangeTracker(models, on_commit)` listens to the session,
+  remembers the new, modified and deleted rows of the tracked models after each flush,
+  forgets them on a rollback or a close, and passes them to `on_commit` after the outermost
+  commit as a list of `TrackedChange(kind, pk, deleted, version)`. `attach(target)` takes an
+  `async_sessionmaker`, an `AsyncSession` class or a sync `Session` class; `detach()` undoes
+  it. `track(session, Model, ids)` records rows changed by a Core `update()`/`delete()`,
+  which never reach the flush.
+- `spawn_background(coro)`: starts a task that nobody awaits, keeps a reference to it and
+  logs only the type of its exception. `on_commit` is sync (it runs inside the commit), so
+  it uses this to build and send the event.
+
+### Upgrade notes
+
+- No existing API changes: bump only. A service that uses the tracker builds the event with
+  a session of its own and sends it with `emit_safe`; it keeps a resync command, because an
+  event is lost if the process stops between the commit and the send.
+- Listeners are attached to the class of the sync session (SQLAlchemy's `Session` for the
+  default `AsyncSession`), so they see every session of the process and ignore the models
+  they do not track.
+- A Core `update()` does not bump `version_id_col`: the service adds `version + 1` itself
+  and calls `track()`.
+
 ## 0.17.0
 
 New public API, backward-compatible. The statistics-api (new service) reads the
