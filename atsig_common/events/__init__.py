@@ -9,6 +9,9 @@ The call event (`calls_events`) carries the nested documents, disciplines and ex
 fields of a call; the lead event (`programme_leads`) is sent by the programmes-api and
 nobody consumes it yet.
 
+The application event (`application_updates`) is a statistics snapshot without personal
+data, sent by the applications-api.
+
 The academic catalogue of the uni-api (universities, schools, departments) travels as
 full snapshots, one stream per entity, with `UniDeleteEvent` for a deletion.
 """
@@ -16,6 +19,10 @@ full snapshots, one stream per entity, with `UniDeleteEvent` for a deletion.
 from .schemas import (
     DLQ_SUFFIX,
     Actions,
+    ApplicationDeleteEvent,
+    ApplicationEducationEvent,
+    ApplicationEvent,
+    ApplicationLanguageEvent,
     CallDisciplineEvent,
     CallEvent,
     CallExtraFieldEvent,
@@ -37,6 +44,10 @@ from .schemas import (
 
 __all__ = [
     "Actions",
+    "ApplicationDeleteEvent",
+    "ApplicationEducationEvent",
+    "ApplicationEvent",
+    "ApplicationLanguageEvent",
     "CallDisciplineEvent",
     "CallEvent",
     "CallExtraFieldEvent",

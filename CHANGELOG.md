@@ -2,6 +2,27 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.17.0
+
+New public API, backward-compatible. The statistics-api (new service) reads the
+applications from a stream, so the applications-api needs an event for them.
+
+### Added
+
+- `Streams.APPLICATIONS` (`application_updates`).
+- `ApplicationEvent`: a full snapshot of an application for statistics, with `version`.
+  It carries the ids (`applicant_id`, `call_id`, `programme_id`, `agent_id`), the
+  statuses, the dates, the attendance mode, the UTM source/medium/campaign and a few
+  demographics of the applicant (gender, `birth_year`, nationalities, degrees as
+  `ApplicationEducationEvent`, language certificates as `ApplicationLanguageEvent`,
+  months and count of work experience). No name, email, phone, id number, files or
+  free text.
+- `ApplicationDeleteEvent {id, version}` for `Actions.DELETE` (version = last + 1).
+
+### Upgrade notes
+
+- Nothing changes for the services that do not use the new events: bump only.
+
 ## 0.16.0
 
 ### Added
@@ -164,7 +185,7 @@ Additive: new events, a new stream name set and a way to drop `UniCache` entries
   and the statistics-api will.
 - `atsig_common.redis.uni_cache_keys`: the key templates of the `UniCache` (`DEPT_KEY`,
   `SCHOOL_KEY`, `UNI_HASH_KEY`) and `invalidate_uni_cache(redis, department_ids=,
-  school_ids=, university_ids=)`, which drops the entries that a change of the uni-api
+school_ids=, university_ids=)`, which drops the entries that a change of the uni-api
   made stale. It never raises (a failure is logged by the type of the error, the entries
   expire with their TTL) and does not import the `UniAPI` client, so the uni-api can use
   it without the `api_client` extra.
@@ -221,7 +242,7 @@ Additive, except that the payload of `ProgrammeUpdateEvent` now carries more key
 
 - Nothing breaks. Rollout order for the change of meaning of `is_archived`: the consumer
   (applications-api) first, then the producer (programmes-api), then `manage.py resync
-  programmes` and `resync calls`. Until the resync, a consumer sees `admission_type` as
+programmes` and `resync calls`. Until the resync, a consumer sees `admission_type` as
   `None` on the rows it has and has to treat `is_archived` as it did before.
 - A producer of `CallEvent` sends `to_payload()`; a consumer validates with `CallEvent`
   and logs `CallEvent.unexpected_keys(payload)` by name.

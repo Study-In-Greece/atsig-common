@@ -1,6 +1,6 @@
 [project]
 name = "atsig-common"
-version = "0.16.0"
+version = "0.17.0"
 description = "Shared utilities for ATSIG microservices"
 authors = [{ name = "th-papaz" }]
 requires-python = ">=3.13"
@@ -76,9 +76,9 @@ select = [
     "SIM", # simplify
 ]
 ignore = [
-    "E501",   # long docstring lines — follow-up cleanup commit, tracked separately
-    "UP046",  # Generic[T] -> PEP 695 refactor — needs its own PR, touches shared base classes
-    "UP047",  # same for generic functions (the services ignore it too)
+    "E501",  # long docstring lines — follow-up cleanup commit, tracked separately
+    "UP046", # Generic[T] -> PEP 695 refactor — needs its own PR, touches shared base classes
+    "UP047", # same for generic functions (the services ignore it too)
 ]
 
 [tool.ruff.lint.flake8-bugbear]
