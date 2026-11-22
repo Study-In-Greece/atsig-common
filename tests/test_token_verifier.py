@@ -202,6 +202,45 @@ def test_the_issuer_check_when_it_is_on():
             verifier.decode(make_token(KEY_1, **wrong))
 
 
+def test_log_mode_accepts_the_token_and_names_only_the_claim(caplog):
+    verifier = TokenVerifier(
+        FakeRealm(KEY_1),
+        issuer="https://sso/realms/x",
+        audience="applications",
+        claims_mode="log",
+    )
+
+    with caplog.at_level("WARNING"):
+        claims = verifier.decode(
+            make_token(KEY_1, iss="https://evil.example", aud="account")
+        )
+
+    assert claims["sub"] == "u1"
+    text = " ".join(r.getMessage() for r in caplog.records)
+    assert "'iss'" in text and "'aud'" in text
+    assert "evil.example" not in text
+
+
+def test_log_mode_still_rejects_a_bad_signature():
+    verifier = TokenVerifier(FakeRealm(KEY_1), issuer="x", claims_mode="log")
+
+    with pytest.raises(HTTPException):
+        verifier.decode(make_token(STRANGER))
+
+
+def test_the_claims_mode_comes_from_the_settings():
+    settings = SimpleNamespace(
+        AUTHORIZATION_URL="http://kc",
+        KEYCLOAK_CLIENT_ID="c",
+        KEYCLOAK_REALM="r",
+        KEYCLOAK_CLIENT_SECRET="s",
+        KEYCLOAK_VERIFY_SSL=True,
+        KEYCLOAK_CLAIMS_MODE="log",
+    )
+
+    assert get_verifier(create_keycloak_client(settings)).claims_mode == "log"
+
+
 def test_the_audience_check_accepts_a_string_or_a_list():
     verifier = TokenVerifier(FakeRealm(KEY_1), audience="applications")
 

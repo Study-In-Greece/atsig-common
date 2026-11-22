@@ -57,6 +57,7 @@ def create_keycloak_client(settings: KeycloakSettingsProto) -> KeycloakOpenID:
             client,
             issuer=getattr(settings, "KEYCLOAK_EXPECTED_ISSUER", None),
             audience=getattr(settings, "KEYCLOAK_EXPECTED_AUDIENCE", None),
+            claims_mode=getattr(settings, "KEYCLOAK_CLAIMS_MODE", "enforce"),
         ),
     )
     return client
