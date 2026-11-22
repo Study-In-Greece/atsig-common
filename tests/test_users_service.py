@@ -259,3 +259,24 @@ async def test_sync_creates_then_updates():
     user = await svc.sync_local_user(bg, data2, "u1")
     assert user.first_name == "Z"
     assert len(bg.tasks) == 2
+
+
+async def test_without_sync_events_the_service_sends_none_but_the_delete_one():
+    admin, producer, session = FakeAdmin(), FakeProducer(), FakeSession()
+    svc = Service(
+        User, session, KeycloakUserService(admin), producer, emit_sync_events=False
+    )
+    bg = BackgroundTasks()
+
+    await svc.create_local_user_only(
+        bg,
+        UserLocalCreate(
+            email="a@b.gr", first_name="A", last_name="B", group_path="/Secretary"
+        ),
+        user_uuid="u1",
+    )
+    await svc.update_local_user_only(bg, "u1", UserUpdate(first_name="Z"))
+    await svc.delete_user(bg, "u1")
+    await run_tasks(bg)
+
+    assert [e["action"] for e in producer.events] == [Actions.DELETE]

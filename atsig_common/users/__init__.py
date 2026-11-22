@@ -1,3 +1,4 @@
+from .events import make_user_event_tracker, publish_user_changes
 from .models import UserMixin
 from .schemas import (
     NAME_MAX,
@@ -18,4 +19,6 @@ __all__ = [
     "UserRead",
     "UserService",
     "UserUpdate",
+    "make_user_event_tracker",
+    "publish_user_changes",
 ]
