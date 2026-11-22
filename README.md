@@ -7,10 +7,11 @@ Shared utilities package for the ATSIG (Study In Greece) microservices — `prog
 - **Auth** (`atsig_common.auth`) — Keycloak group-based RBAC (`GroupEnum`, `validate_user_groups`), `BaseAuthContext`/`BaseAccessPolicy`, token verification with cached signing keys (`decode_token`, `adecode_token`, `TokenVerifier`), and the shared FastAPI dependencies (`auth.dependencies`: the token is decoded once per request).
 - **Bootstrap** (`atsig_common.bootstrap`) — `build_core(settings)`: Keycloak, Redis, storage and API clients built from the settings, with a lifespan that starts and stops them in order.
 - **Keycloak admin** (`atsig_common.keycloak_admin`) — `KeycloakUserService` (create, update, delete, invite users and move them between groups, off the event loop), `create_keycloak_admin(settings)`, and `NewIdentityTracker` (removes the accounts a failed request created). No passwords: a new user gets an invitation email from Keycloak.
-- **Users** (`atsig_common.users`) — `UserMixin` (the `user` table), the user schemas and `UserService`: the Keycloak account, the local row and the `user_events` stream together, with the invitation email sent after the commit.
+- **Users** (`atsig_common.users`) — `UserMixin` (the `user` table), the user schemas and `UserService`: the Keycloak account, the local row and the `user_events` stream together, with the invitation email sent after the commit. `make_user_event_tracker` sends the sync event for every change of the user table instead.
 - **Observability** (`atsig_common.observability`, `atsig_common.logger`) — `init_observability` (JSON logging, Sentry), `setup_app` (handlers, request-context middleware, CORS, debug route outside production), request ids that travel with calls and events.
-- **Redis** (`atsig_common.redis`) — `RedisManager`, `EventProducer` (optional `maxlen`, retries, `default_retries`, `emit_safe`), `BaseRedisConsumer` (consumer groups, retries, Dead Letter Queue, reclaim of pending messages, graceful shutdown, `ConsumerOutcome`, `consumer_name_from_hostname`), `UniCache` (and `invalidate_uni_cache` to drop its entries), and `make_get_event_producer`.
+- **Redis** (`atsig_common.redis`) — `RedisManager`, `EventProducer` (optional `maxlen`, retries, `default_retries`, `emit_safe`), `BaseRedisConsumer` (consumer groups that are created again when Redis loses them, retries, Dead Letter Queue, reclaim of pending messages, graceful shutdown, `ConsumerOutcome`, `consumer_name_from_hostname`), `supervise` (runs the consumers of a worker together, with a heartbeat and `python -m atsig_common.redis.healthcheck`), `Handler`/`HandlerConsumer` (a consumer that validates an event and applies it in one transaction), `UniCache` (and `invalidate_uni_cache` to drop its entries), and `make_get_event_producer`.
 - **Events** (`atsig_common.events`) — the events the services send each other, defined once (`UserSyncEvent`, `ProgrammeUpdateEvent` (a full snapshot of the programme), `CallEvent`, `LeadEvent`, `ApplicationEvent` (a statistics snapshot without personal data), `UniversityEvent`/`SchoolEvent`/`DepartmentEvent`, ...), the stream names and the names of the dead letter streams (`dlq_name`). `atsig_common.events.tracking` (`ChangeTracker`, `spawn_background`) collects the rows a session changed and hands them over after the commit, so a producer sends its events from one place.
+- **Admin** (`atsig_common.admin`) — `make_streams_router` (overview of the streams a service reads, and the dead letter queues: list, replay, discard) and `make_resync_router` (the resync jobs of a service, started in the background, one at a time). The service passes its own admin authorization.
 - **Files** (`atsig_common.files`, `atsig_common.middleware`) — upload type detection from the bytes, storage key checks, temporary files, and the multipart body limit middleware.
 - **Database** (`atsig_common.db`) — `create_db_engine` / `create_db_engine_from_settings` (pool size from `DB_POOL_SIZE` and `DB_MAX_OVERFLOW`) / `create_session_factory`, `IDMixin`, `TimestampMixin`.
 - **Services** (`atsig_common.services`) — `CRUDBaseService`/`CRUDBaseAuthService` generic base classes and the service dependency factory.
@@ -18,7 +19,7 @@ Shared utilities package for the ATSIG (Study In Greece) microservices — `prog
 - **Schemas** (`atsig_common.schemas`) — `IdRead` and `FileUrlRead`, the response models of the routes that answer `{"id": ...}` (a delete) or `{"url": ...}` (a signed URL).
 - **Email** (`atsig_common.email`) — email client with template + bulk send support (`asend_email` for async code), and `make_get_email_client`.
 - **Time** (`atsig_common.time`) — `today_athens()`: the date in Greece, whatever the time zone of the container is (containers run in UTC).
-- **API client** (`atsig_common.api_client`) — async HTTP client factory for service-to-service calls (errors of the other service become `UpstreamError`, a 502).
+- **API client** (`atsig_common.api_client`) — async HTTP client factory for service-to-service calls (errors of the other service become `UpstreamError`, a 502; timeouts and pool from `HTTP_*` settings).
 - **Turnstile** (`atsig_common.turnstile`) — `verify_turnstile` and the dependency `make_require_turnstile`: server-side check of a Cloudflare Turnstile token (header `X-Turnstile-Token`) for public forms (off when the secret is empty).
 - **Exceptions** (`atsig_common.exceptions`) — shared error types used consistently across services.
 
@@ -55,6 +56,8 @@ Keycloak client per frontend, one client for all the APIs):
 - Decode a token without sending it anywhere:
   `python3 -c "import sys,base64,json;t=sys.argv[1].split('.')[1];print(json.loads(base64.urlsafe_b64decode(t+'='*(-len(t)%4))))" "<token>"`
   (read only `iss`, `aud`, `azp`).
+
+`KEYCLOAK_CLAIMS_MODE=log` accepts a token with another issuer or audience and writes a warning that names the claim: set the expected values in this mode first, read the logs, then switch to `enforce`.
 
 ## Requirements
 
