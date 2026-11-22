@@ -29,6 +29,13 @@ def make_settings(**overrides):
         "R2_PRIVATE_BUCKET": "private",
         "R2_PUBLIC_BUCKET": None,
         "UNI_API_URL": "http://uni",
+        "S3_CONNECT_TIMEOUT": 5.0,
+        "S3_READ_TIMEOUT": 60.0,
+        "S3_MAX_POOL_CONNECTIONS": 50,
+        "HTTP_CONNECT_TIMEOUT": 5.0,
+        "HTTP_TIMEOUT": 10.0,
+        "HTTP_POOL_TIMEOUT": 5.0,
+        "HTTP_MAX_CONNECTIONS": 100,
     }
     return SimpleNamespace(**{**values, **overrides})
 
@@ -180,7 +187,8 @@ settings = SimpleNamespace(
     KEYCLOAK_CLIENT_SECRET="s", KEYCLOAK_VERIFY_SSL=True, REDIS_SERVER="redis",
     REDIS_PORT=6379, REDIS_PASSWORD=None, R2_ENDPOINT_URL="http://r2",
     R2_ACCESS_KEY_ID="k", R2_SECRET_ACCESS_KEY="s", R2_PRIVATE_BUCKET=None,
-    R2_PUBLIC_BUCKET="public",
+    R2_PUBLIC_BUCKET="public", S3_CONNECT_TIMEOUT=5.0, S3_READ_TIMEOUT=60.0,
+    S3_MAX_POOL_CONNECTIONS=50,
 )
 """
 
@@ -234,3 +242,30 @@ def test_asking_for_redis_without_the_package_fails_clearly():
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "ImportError"
+
+
+def test_timeouts_and_pools_come_from_the_settings():
+    core = build_core(
+        make_settings(
+            S3_CONNECT_TIMEOUT=2.0,
+            S3_READ_TIMEOUT=30.0,
+            S3_MAX_POOL_CONNECTIONS=7,
+            HTTP_CONNECT_TIMEOUT=1.5,
+            HTTP_TIMEOUT=4.0,
+            HTTP_POOL_TIMEOUT=3.0,
+            HTTP_MAX_CONNECTIONS=20,
+        )
+    )
+
+    assert core.storage.connect_timeout == 2.0
+    assert core.storage.read_timeout == 30.0
+    assert core.storage.max_pool_connections == 7
+    timeout = HttpClientManager.timeout
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (
+        1.5,
+        4.0,
+        4.0,
+        3.0,
+    )
+    assert HttpClientManager.limits.max_connections == 20
+    HttpClientManager.configure()  # back to the defaults for the other tests

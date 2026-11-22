@@ -157,6 +157,9 @@ def build_core(
             r2_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
             r2_private_bucket=settings.R2_PRIVATE_BUCKET,
             r2_public_bucket=settings.R2_PUBLIC_BUCKET,
+            connect_timeout=settings.S3_CONNECT_TIMEOUT,
+            read_timeout=settings.S3_READ_TIMEOUT,
+            max_pool_connections=settings.S3_MAX_POOL_CONNECTIONS,
         )
 
     api_factory = None
@@ -164,6 +167,12 @@ def build_core(
         from .api_client.factory import APIClientFactory
 
         api_factory = APIClientFactory(settings=settings, token_manager=token_manager)
+        api_factory.http_manager.configure(
+            connect_timeout=settings.HTTP_CONNECT_TIMEOUT,
+            timeout=settings.HTTP_TIMEOUT,
+            pool_timeout=settings.HTTP_POOL_TIMEOUT,
+            max_connections=settings.HTTP_MAX_CONNECTIONS,
+        )
 
     return Core(
         keycloak=keycloak,
