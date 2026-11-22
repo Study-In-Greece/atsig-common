@@ -11,6 +11,7 @@ from atsig_common.auth.dependencies import (
     make_get_auth,
     make_get_auth_context,
     make_get_optional_auth_context,
+    make_get_optional_policy,
     make_get_policy,
     make_get_token_payload,
 )
@@ -75,7 +76,13 @@ def make_app(keycloak, **optional_kwargs) -> TestClient:
         optional, keycloak, get_session, context_cls=Ctx, **optional_kwargs
     )
 
+    get_optional_policy = make_get_optional_policy(get_optional, Policy)
+
     app = FastAPI()
+
+    @app.get("/optional-policy")
+    async def optional_policy(policy: Policy | None = Depends(get_optional_policy)):
+        return {"user": policy.ctx.email if policy else None}
 
     @app.get("/evaluators", dependencies=[Security(get_auth, scopes=["/Evaluators"])])
     async def evaluators(policy: Policy = Depends(get_policy)):
@@ -224,3 +231,16 @@ def test_a_token_that_fails_is_not_kept(keycloak):
 
     assert response.status_code == 401
     assert keycloak.decodes == 2  # decoded again, and failed again, by the scope check
+
+
+def test_the_optional_policy_is_none_for_a_visitor_and_built_for_a_user(keycloak):
+    client = make_app(keycloak)
+
+    assert client.get("/optional-policy").json() == {"user": None}
+    assert client.get("/optional-policy", headers=bearer("good")).json() == {
+        "user": "u1@example.com"
+    }
+    # an invalid token is a visitor too (the default of the optional context)
+    assert client.get("/optional-policy", headers=bearer("bad")).json() == {
+        "user": None
+    }

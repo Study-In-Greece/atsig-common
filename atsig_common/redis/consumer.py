@@ -133,6 +133,9 @@ class BaseRedisConsumer:
 
         self._is_running = False
         self._semaphore = asyncio.Semaphore(concurrency)
+        # Monotonic time of the last turn of the loop. The supervisor reads it to tell a
+        # consumer that is alive from one that is stuck (see `redis.supervisor`).
+        self.last_loop_at: float | None = None
 
     async def _ensure_consumer_group(self):
         """
@@ -155,6 +158,30 @@ class BaseRedisConsumer:
                 logger.debug(f"[Consumer] Group '{self.group_name}' already exists.")
             else:
                 raise e
+
+    async def _recover_missing_group(self, error: Exception) -> bool:
+        """
+        Redis lost the group (it restarted without persistence, or somebody ran
+        XGROUP DESTROY): every read answers NOGROUP and the loop would never recover.
+        Creates the group again (it starts at `group_start_id`, so the entries of the
+        stream are read again; handlers are idempotent) and returns True. Returns False
+        for any other error, or when the group could not be created.
+        """
+        if not (isinstance(error, ResponseError) and "NOGROUP" in str(error)):
+            return False
+        logger.warning(
+            f"[Consumer] Group '{self.group_name}' of '{self.stream_name}' is gone, "
+            f"creating it again."
+        )
+        try:
+            await self._ensure_consumer_group()
+        except Exception as create_error:
+            logger.error(
+                f"[Consumer] Could not create the group again: "
+                f"{type(create_error).__name__}"
+            )
+            return False
+        return True
 
     def _dlq_options(self) -> dict[str, Any]:
         if self.dlq_maxlen is None:
@@ -492,6 +519,7 @@ class BaseRedisConsumer:
         last_reclaim: float | None = None  # monotonic time of the last reclaim
 
         while self._is_running:
+            self.last_loop_at = time.monotonic()
             try:
                 # First thing at start, and then every `reclaim_interval_s`
                 now = time.monotonic()
@@ -537,6 +565,10 @@ class BaseRedisConsumer:
                 raise
 
             except Exception as loop_error:
+                if await self._recover_missing_group(loop_error):
+                    # Not a failure of Redis: the group was missing and is back
+                    last_reclaim = None
+                    continue
                 failures += 1
                 give_up = bool(self.max_loop_failures) and (
                     failures >= self.max_loop_failures

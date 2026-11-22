@@ -17,6 +17,9 @@ class S3Storage(BaseStorage):
         r2_secret_access_key: str,
         r2_private_bucket: str | None = None,
         r2_public_bucket: str | None = None,
+        connect_timeout: float = 5.0,
+        read_timeout: float = 60.0,
+        max_pool_connections: int = 50,
     ):
         """
         Initializes the storage manager with Cloudflare R2 credentials.
@@ -27,12 +30,19 @@ class S3Storage(BaseStorage):
             r2_secret_access_key: R2 API Secret Key.
             r2_private_bucket: Optional name of the private bucket.
             r2_public_bucket: Optional name of the public bucket.
+            connect_timeout: Seconds to wait for a connection (botocore: 60).
+            read_timeout: Seconds to wait for a read (botocore: 60).
+            max_pool_connections: Size of the connection pool (botocore: 10).
         """
         self.r2_endpoint_url = r2_endpoint_url
         self.r2_access_key_id = r2_access_key_id
         self.r2_secret_access_key = r2_secret_access_key
         self.r2_private_bucket = r2_private_bucket
         self.r2_public_bucket = r2_public_bucket
+
+        self.connect_timeout = connect_timeout
+        self.read_timeout = read_timeout
+        self.max_pool_connections = max_pool_connections
 
         self.session = aioboto3.Session()
         self._s3_client = None
@@ -43,7 +53,11 @@ class S3Storage(BaseStorage):
         Should be called within the FastAPI lifespan startup.
         """
         s3_config = Config(
-            signature_version="s3v4", retries={"max_attempts": 3, "mode": "standard"}
+            signature_version="s3v4",
+            retries={"max_attempts": 3, "mode": "standard"},
+            connect_timeout=self.connect_timeout,
+            read_timeout=self.read_timeout,
+            max_pool_connections=self.max_pool_connections,
         )
 
         self._s3_client = await self.session.client(

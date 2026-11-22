@@ -217,12 +217,30 @@ def make_get_policy(
     return get_policy
 
 
+def make_get_optional_policy(
+    get_optional_auth_context: Callable[..., Any], policy_cls: type
+) -> Callable[..., Any]:
+    """
+    The dependency that gives the access policy for the user, or None for a visitor
+    without a (valid) token. `make_get_policy` over an optional context builds a policy
+    for the anonymous too; use this one when the route has to tell the two apart.
+    """
+
+    async def get_optional_policy(
+        context: BaseAuthContext | None = Depends(get_optional_auth_context),
+    ):
+        return None if context is None else policy_cls(ctx=context)
+
+    return get_optional_policy
+
+
 __all__ = [
     "REQUIRED_CLAIMS",
     "build_auth_context",
     "make_get_auth",
     "make_get_auth_context",
     "make_get_optional_auth_context",
+    "make_get_optional_policy",
     "make_get_policy",
     "make_get_token_payload",
 ]

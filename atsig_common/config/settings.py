@@ -1,3 +1,4 @@
+from typing import Literal
 from urllib.parse import quote
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -58,6 +59,9 @@ class BaseAtsigSettings(BaseSettings):
     # Audience: needs an audience mapper on the Keycloak client, otherwise tokens
     # carry `aud: account`.
     KEYCLOAK_EXPECTED_AUDIENCE: str | None = None
+    # "log": a token with another issuer/audience is accepted and a warning names the
+    # claim. Turn the checks on in this mode first, read the logs, then use "enforce".
+    KEYCLOAK_CLAIMS_MODE: Literal["enforce", "log"] = "enforce"
     # The admin client (users and groups), for the services that create accounts
     # (`atsig_common.keycloak_admin`). Unset in the others.
     KEYCLOAK_ADMIN_CLIENT_ID: str | None = None
@@ -75,6 +79,17 @@ class BaseAtsigSettings(BaseSettings):
     R2_PRIVATE_BUCKET: str | None = None
     R2_PUBLIC_BUCKET: str | None = None
     R2_PUBLIC_DOMAIN: str | None = None
+    # Timeouts (seconds) and pool of the S3 client. The botocore defaults wait 60 s to
+    # connect, which hangs a request when R2 is unreachable.
+    S3_CONNECT_TIMEOUT: float = 5.0
+    S3_READ_TIMEOUT: float = 60.0
+    S3_MAX_POOL_CONNECTIONS: int = 50
+
+    # --- 6. HTTP calls to the other services (httpx) ---
+    HTTP_CONNECT_TIMEOUT: float = 5.0
+    HTTP_TIMEOUT: float = 10.0  # read and write
+    HTTP_POOL_TIMEOUT: float = 5.0
+    HTTP_MAX_CONNECTIONS: int = 100
 
     # --- COMPUTED PROPERTIES ---
     @property

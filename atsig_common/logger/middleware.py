@@ -5,7 +5,8 @@ import uuid
 import jwt
 import sentry_sdk
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from atsig_common.logger.context import (
     is_valid_request_id,
@@ -36,9 +37,13 @@ def loggable_path(request: Request) -> str:
     return template or request.url.path[:200]
 
 
-class LoggingContextMiddleware(BaseHTTPMiddleware):
+class LoggingContextMiddleware:
     """
     Middleware that populates logging context variables for each HTTP request.
+
+    A pure ASGI middleware (not `BaseHTTPMiddleware`): it does not run the endpoint in a
+    separate task, so the context variables, `BackgroundTasks` and the cancellation of a
+    request behave as in the app, and it does not buffer a streamed response.
 
     Responsibilities:
     1. Extracts or generates a unique Request ID.
@@ -49,12 +54,18 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
        error logs contain the correct Request ID and User Email.
     """
 
-    def __init__(self, app, include_user_email: bool = True):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, include_user_email: bool = True):
+        self.app = app
         # When False the email of the user is neither logged nor sent to Sentry
         self.include_user_email = include_user_email
 
-    async def dispatch(self, request: Request, call_next):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
+
         # 1. Handle Correlation ID (Request ID)
         # Use the provided header if it is valid (behind a proxy, or a call from
         # another service), otherwise generate a new short UUID
@@ -93,22 +104,25 @@ class LoggingContextMiddleware(BaseHTTPMiddleware):
         token_uid = user_id_var.set(user_id)
         token_email = user_email_var.set(user_email)
 
+        start_time = time.time()
+
+        async def send_with_log(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                # 4. Write our custom, context-aware access log (when the response
+                # starts: the route is known by now, and the time is that of the endpoint)
+                process_time = time.time() - start_time
+                client_ip = request.client.host if request.client else "unknown"
+                logger.info(
+                    f'{client_ip} - "{request.method} {loggable_path(request)}" '
+                    f"{message['status']} ({process_time:.3f}s)"
+                )
+                # Inject Request ID into response headers for client/frontend debugging
+                MutableHeaders(scope=message)["X-Request-ID"] = request_id
+            await send(message)
+
         try:
-            # 3. Process the actual endpoint logic and measure execution time
-            start_time = time.time()
-            response = await call_next(request)
-            process_time = time.time() - start_time
-
-            # 4. Write our custom, context-aware access log
-            client_ip = request.client.host if request.client else "unknown"
-            logger.info(
-                f'{client_ip} - "{request.method} {loggable_path(request)}" '
-                f"{response.status_code} ({process_time:.3f}s)"
-            )
-
-            # Inject Request ID into response headers for client/frontend debugging
-            response.headers["X-Request-ID"] = request_id
-            return response
+            # 3. Process the actual endpoint logic
+            await self.app(scope, receive, send_with_log)
 
         except Exception:
             # 5. Catch unhandled exceptions to log them WITH context before the finally block clears it.

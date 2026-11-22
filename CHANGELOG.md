@@ -2,6 +2,60 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.19.0
+
+New public API, backward-compatible, and two behaviour changes (timeouts, middleware) that
+every service gets by bumping.
+
+### Added
+
+- `BaseRedisConsumer`: when Redis loses the consumer group (it restarted without
+  persistence, or `XGROUP DESTROY`) the loop creates it again and goes on, instead of
+  failing on `NOGROUP` until the process exits. Also `last_loop_at`.
+- `atsig_common.redis.supervisor`: `supervise(consumers, stop_requested, logger)` and
+  `install_stop_signals`, the supervisor that the workers of the applications-api,
+  programmes-api and statistics-api copied (exit 0 on a stop, exit 1 when a consumer
+  ends). It writes a heartbeat file while every consumer keeps turning its loop, and
+  `python -m atsig_common.redis.healthcheck --max-age 60` is the healthcheck for it.
+- `atsig_common.redis.handler_consumer`: `Handler` (what a service does with the events
+  of one stream) and `HandlerConsumer` (validates with the model of the common, applies
+  in one transaction, reports applied/ignored), and `validate_event` for the consumers
+  that keep their own class.
+- `atsig_common.admin` (needs `fastapi`, `redis` and `db`): `make_streams_router` (overview of
+  the streams a service reads, and list/replay/discard of their dead letter queues, with
+  the same routes and bodies as the DLQ admin of the applications-api) and
+  `make_resync_router` (`ResyncJob`s started in the background, one run at a time, state
+  in Redis with the type of an error only).
+- `atsig_common.users.events`: `make_user_event_tracker` sends the `user_events` sync
+  event for every change of the user table; `UserService(emit_sync_events=False)` stops
+  the service from sending it twice. The delete event stays in `UserService.delete_user`
+  (after Keycloak).
+- `make_get_optional_policy` (the policy, or None for a visitor).
+- Settings: `HTTP_CONNECT_TIMEOUT`, `HTTP_TIMEOUT`, `HTTP_POOL_TIMEOUT`,
+  `HTTP_MAX_CONNECTIONS`, `S3_CONNECT_TIMEOUT`, `S3_READ_TIMEOUT`,
+  `S3_MAX_POOL_CONNECTIONS`, `KEYCLOAK_CLAIMS_MODE` (`enforce` default, or `log`).
+
+### Changed
+
+- `LoggingContextMiddleware` is a pure ASGI middleware (was `BaseHTTPMiddleware`): same
+  request ids, access log and user context, and it no longer runs the endpoint in another
+  task or buffers a streamed response.
+- The shared httpx client waits 5 s to connect (was 10 s total), 10 s to read and write,
+  5 s for a free connection, 100 connections. The S3 client waits 5 s to connect (botocore:
+  60 s), 60 s to read, and has a pool of 50 (botocore: 10).
+
+### Upgrade notes
+
+- Bump only. The new settings have defaults; a service that needs a slower upstream sets
+  `HTTP_TIMEOUT` / `S3_READ_TIMEOUT`.
+- A service with its own `supervise`, `Handler` or DLQ router can replace it with these
+  and delete the copy. The worker container can use the heartbeat as its healthcheck:
+  `python -m atsig_common.redis.healthcheck --max-age 60`. `--max-age` must be longer than
+  the slowest handler of the worker.
+- `make_streams_router` and `make_resync_router` do not decide who is an admin: pass
+  `dependencies=[Security(get_auth, scopes=[GroupEnum.ADMIN.value])]`.
+- `KEYCLOAK_CLAIMS_MODE=log` only affects `iss`/`aud` (a bad signature is still a 401).
+
 ## 0.18.0
 
 New public API, backward-compatible. A producer that sends an event for every change of a

@@ -4,7 +4,7 @@ import threading
 import time
 import weakref
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import HTTPException, status
 from jwcrypto import jwk, jwt
@@ -53,6 +53,10 @@ class TokenVerifier:
         audience: When set, the `aud` claim must be this (or a list that holds it).
             Off by default: Keycloak puts `aud: account` in a token unless an audience
             mapper is configured on the client.
+        claims_mode: `"enforce"` (default) rejects a token whose `iss` or `aud` is not the
+            expected one. `"log"` accepts it and writes a warning with the NAME of the
+            claim (never its value): switch a new `issuer`/`audience` on in this mode
+            first, read the logs, then enforce.
         clock: Returns the current time in seconds (replaced in tests).
     """
 
@@ -65,6 +69,7 @@ class TokenVerifier:
         leeway: int = 60,
         issuer: str | None = None,
         audience: str | None = None,
+        claims_mode: Literal["enforce", "log"] = "enforce",
         clock: Callable[[], float] = time.monotonic,
     ):
         self.keycloak_client = keycloak_client
@@ -73,6 +78,7 @@ class TokenVerifier:
         self.leeway = leeway
         self.issuer = issuer
         self.audience = audience
+        self.claims_mode = claims_mode
         self._clock = clock
 
         self._keys: jwk.JWKSet | None = None
@@ -159,16 +165,25 @@ class TokenVerifier:
             raise _invalid() from None
 
         if self.issuer and claims.get("iss") != self.issuer:
-            raise _invalid()
+            self._claim_mismatch("iss")
         if self.audience:
             audience = claims.get("aud")
             accepted = audience == self.audience or (
                 isinstance(audience, list) and self.audience in audience
             )
             if not accepted:
-                raise _invalid()
+                self._claim_mismatch("aud")
 
         return claims
+
+    def _claim_mismatch(self, claim: str) -> None:
+        """A claim is not the expected one: 401, or only a warning in log mode."""
+        if self.claims_mode == "log":
+            logger.warning(
+                f"Token claim '{claim}' is not the expected one (log mode: accepted)"
+            )
+            return
+        raise _invalid()
 
 
 def _invalid() -> HTTPException:

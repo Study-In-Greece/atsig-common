@@ -47,10 +47,22 @@ class UserService(CRUDBaseService[Any, UserCreate, UserUpdate]):
         session: AsyncSession,
         kc_service: KeycloakUserService,
         producer: EventProducer,
+        emit_sync_events: bool = True,
     ):
+        """
+        Args:
+            emit_sync_events: True (default) sends the `user_events` sync event from
+                the service, after each create/update. Pass False in a service that
+                attaches the tracker of `atsig_common.users.events`: the tracker then
+                sends it for EVERY change of the user table (also one that does not go
+                through this service), and the service must not send it twice. The
+                delete event is always sent here, after the user was removed from
+                Keycloak.
+        """
         super().__init__(user_model, session)
         self.kc_service = kc_service
         self.producer = producer
+        self.emit_sync_events = emit_sync_events
         # The Keycloak users this request created. If the request fails they are removed
         # again (`discard_identity`, `commit`): the uuid of the local user is the id in
         # Keycloak, so the user has to be created there first.
@@ -259,12 +271,13 @@ class UserService(CRUDBaseService[Any, UserCreate, UserUpdate]):
         self.session.add(new_user)
         await self.session.flush()
 
-        background_tasks.add_task(
-            self.producer.emit_safe,
-            stream_name=Streams.USERS,
-            action=Actions.SYNC,
-            payload=_user_sync_payload(new_user),
-        )
+        if self.emit_sync_events:
+            background_tasks.add_task(
+                self.producer.emit_safe,
+                stream_name=Streams.USERS,
+                action=Actions.SYNC,
+                payload=_user_sync_payload(new_user),
+            )
 
         return new_user
 
@@ -288,12 +301,13 @@ class UserService(CRUDBaseService[Any, UserCreate, UserUpdate]):
 
         await self.session.flush()
 
-        background_tasks.add_task(
-            self.producer.emit_safe,
-            stream_name=Streams.USERS,
-            action=Actions.SYNC,
-            payload=_user_sync_payload(db_user),
-        )
+        if self.emit_sync_events:
+            background_tasks.add_task(
+                self.producer.emit_safe,
+                stream_name=Streams.USERS,
+                action=Actions.SYNC,
+                payload=_user_sync_payload(db_user),
+            )
 
         return db_user
 
