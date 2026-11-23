@@ -2,6 +2,30 @@
 
 Tags have no `v` prefix. The services pin a tag in their `pyproject.toml`.
 
+## 0.19.1
+
+Fix, no new public API.
+
+### Fixed
+
+- `make_streams_router`: the DLQ is one per STREAM, and several groups can read the same
+  stream (the applications-api and the statistics-api both read `programme_updates`), so a
+  service listed, counted and replayed the failures of the other groups too, and a replay
+  would run its own handler on an event that failed in another service. Now each service
+  shows, counts, replays and discards only the entries of its own `consumer_group`. An
+  entry without a group (an old one, or one that could not be read) is shown to every
+  service, because nobody else could clear it. Replaying or discarding an entry of another
+  group answers 400 and names the group. The DLQ names do not change.
+- `HandlerConsumer`: the logs name the `uuid` of an event that has no `id` (the user
+  events) instead of `?`.
+
+### Upgrade notes
+
+- Bump only. `list_dlq_entries` and `discard_dlq_entry` take an optional `group`
+  (`None` keeps the old behaviour: every entry).
+- `dlq_length` of the overview is the count of the entries of the group of the service,
+  not the length of the whole `<stream>_dlq`.
+
 ## 0.19.0
 
 New public API, backward-compatible, and two behaviour changes (timeouts, middleware) that

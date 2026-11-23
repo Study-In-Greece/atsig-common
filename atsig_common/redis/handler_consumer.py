@@ -51,6 +51,12 @@ def validate_event(
     return event
 
 
+def _subject_id(event: Any) -> Any:
+    """The id to write in the logs: `id`, or `uuid` for the user events."""
+    value = getattr(event, "id", None)
+    return value if value is not None else getattr(event, "uuid", "?")
+
+
 class Handler:
     """
     What a service does with the events of ONE stream. `sync` and `delete` receive the
@@ -120,11 +126,11 @@ class HandlerConsumer(BaseRedisConsumer):
                 await session.rollback()
                 logger.error(
                     f"Transaction failed for {self.stream_name} "
-                    f"{getattr(event, 'id', '?')}: {type(e).__name__}"
+                    f"{_subject_id(event)}: {type(e).__name__}"
                 )
                 raise  # Retry / DLQ mechanics of the base consumer
 
-        subject = f"{self.stream_name} {getattr(event, 'id', '?')} (Msg: {message_id})"
+        subject = f"{self.stream_name} {_subject_id(event)} (Msg: {message_id})"
         if applied:
             logger.info(f"Applied '{action}' of {subject}")
             return ConsumerOutcome.applied

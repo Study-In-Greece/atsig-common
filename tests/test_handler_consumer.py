@@ -134,3 +134,28 @@ def test_validate_event_ignores_unknown_keys():
     )
 
     assert event.id == 1
+
+
+async def test_the_log_names_the_uuid_of_a_user_event(caplog):
+    class UserEvent(EventPayload):
+        uuid: str
+
+    class UserHandler(Handler):
+        stream = "users"
+        name = "user"
+        sync_event = UserEvent
+
+        async def sync(self, session, event):
+            return True
+
+    @asynccontextmanager
+    async def factory():
+        yield FakeSession()
+
+    consumer = HandlerConsumer(None, UserHandler(), "group", factory)
+
+    with caplog.at_level("INFO"):
+        await consumer.process_message("1-0", Actions.SYNC, {"uuid": "u-42"})
+
+    text = " ".join(record.getMessage() for record in caplog.records)
+    assert "users u-42" in text

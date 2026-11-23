@@ -62,14 +62,14 @@ class KV:
         return self.groups.get(name, [])
 
 
-def dlq_entry(message_id, action=Actions.SYNC, data=None, error="boom"):
+def dlq_entry(message_id, action=Actions.SYNC, data=None, error="boom", group="g"):
     return (
         message_id,
         {
             "original_message_id": "9-0",
             "payload": json.dumps({"action": action, "data": json.dumps(data or {})}),
             "error": error,
-            "consumer_group": "g",
+            "consumer_group": group,
         },
     )
 
@@ -292,3 +292,55 @@ def test_bad_parameters_and_unknown_jobs():
         assert client.post("/admin/resync/stats", json={"nope": 1}).status_code == 400
         assert client.post("/admin/resync/plain", json={"x": 1}).status_code == 400
         assert client.post("/admin/resync/missing").status_code == 404
+
+
+# --- the DLQ is one per stream, shared by the groups that read it -----------------
+
+
+def test_a_service_sees_only_the_entries_of_its_own_group(kv):
+    kv.streams["things_dlq"] = [
+        dlq_entry("5-0", group="g", data={"id": 1}),
+        dlq_entry("6-0", group="other", data={"id": 2}),
+    ]
+
+    rows = streams_client(kv).get("/admin/streams/things").json()
+
+    assert [r["dlq_message_id"] for r in rows] == ["5-0"]
+
+
+def test_an_entry_without_a_group_is_shown_to_everybody(kv):
+    kv.streams["things_dlq"] = [
+        ("5-0", {"payload": "not json", "error": "x"}),  # unreadable, no group
+        dlq_entry("6-0", group="other"),
+    ]
+
+    rows = streams_client(kv).get("/admin/streams/things").json()
+
+    assert [r["dlq_message_id"] for r in rows] == ["5-0"]
+
+
+def test_the_overview_counts_only_the_entries_of_the_group(kv):
+    kv.streams["things"] = [("1-0", {})]
+    kv.streams["things_dlq"] = [
+        dlq_entry("5-0", group="g"),
+        dlq_entry("6-0", group="other"),
+        dlq_entry("7-0", group="other"),
+    ]
+
+    rows = streams_client(kv).get("/admin/streams/").json()
+
+    assert next(r for r in rows if r["stream"] == "things")["dlq_length"] == 1
+
+
+def test_replay_and_discard_of_another_groups_entry_are_refused(kv):
+    kv.streams["things_dlq"] = [dlq_entry("6-0", group="other", data={"id": 2})]
+    consumer = Replayer()
+    client = streams_client(kv, consumer=consumer)
+
+    replay = client.post("/admin/streams/things/6-0/replay")
+    discard = client.delete("/admin/streams/things/6-0")
+
+    assert replay.status_code == 400 and "other" in replay.text
+    assert discard.status_code == 400
+    assert consumer.got is None  # the handler of this service did not run
+    assert len(kv.streams["things_dlq"]) == 1

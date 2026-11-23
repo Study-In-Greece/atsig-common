@@ -59,6 +59,20 @@ def _decode_fields(fields: dict) -> dict:
         raise UnreadableEntry("fields are not valid text") from e
 
 
+def _belongs(fields: dict, group: str | None) -> bool:
+    """
+    The DLQ is one per STREAM, and several groups can read the same stream (the
+    applications-api and the statistics-api both read `programme_updates`), so an entry
+    says in `consumer_group` whose failure it is. A service shows and replays only its
+    own. An entry with no group (an old one, or one that could not be read) is shown to
+    everybody: nobody else could ever clear it.
+    """
+    if group is None:
+        return True
+    entry_group = _decode(fields.get("consumer_group")) or ""
+    return entry_group in ("", group)
+
+
 def _parse_event(decoded: dict) -> tuple[str, dict]:
     """Returns (action, payload) of the event kept in the entry."""
     if "payload" not in decoded:
@@ -82,9 +96,14 @@ def _parse_event(decoded: dict) -> tuple[str, dict]:
     return str(wrapper.get("action") or ""), data
 
 
-async def list_dlq_entries(redis: RedisManager, stream: str) -> list[DLQEntryRead]:
+async def list_dlq_entries(
+    redis: RedisManager, stream: str, group: str | None = None
+) -> list[DLQEntryRead]:
+    """The DLQ entries of the stream; with `group`, only those of that group."""
     entries = []
     for dlq_id, fields in await redis.xrange(dlq_name(stream)):
+        if not _belongs(fields, group):
+            continue
         dlq_message_id = _decode(dlq_id)
         decoded: dict = {}
         try:
@@ -114,11 +133,19 @@ async def list_dlq_entries(redis: RedisManager, stream: str) -> list[DLQEntryRea
     return entries
 
 
-async def _read_entry(redis: RedisManager, stream: str, dlq_message_id: str) -> dict:
+async def _read_entry(
+    redis: RedisManager, stream: str, dlq_message_id: str, group: str | None = None
+) -> dict:
     raw = await redis.xrange(dlq_name(stream), min=dlq_message_id, max=dlq_message_id)
     if not raw:
         raise NotFoundError(f"DLQ entry {dlq_message_id} not found")
-    return raw[0][1]
+    fields = raw[0][1]
+    if not _belongs(fields, group):
+        raise BadRequestError(
+            f"This DLQ entry belongs to the group '{_decode(fields.get('consumer_group'))}'"
+            ": handle it in the service of that group."
+        )
+    return fields
 
 
 async def replay_dlq_entry(
@@ -134,7 +161,7 @@ async def replay_dlq_entry(
     if spec.build_consumer is None:
         raise BadRequestError("This stream cannot be replayed from here.")
 
-    fields = await _read_entry(redis, stream, dlq_message_id)
+    fields = await _read_entry(redis, stream, dlq_message_id, spec.group)
     try:
         decoded = _decode_fields(fields)
         action, data = _parse_event(decoded)
@@ -166,9 +193,9 @@ async def replay_dlq_entry(
 
 
 async def discard_dlq_entry(
-    redis: RedisManager, stream: str, dlq_message_id: str
+    redis: RedisManager, stream: str, dlq_message_id: str, group: str | None = None
 ) -> None:
-    await _read_entry(redis, stream, dlq_message_id)
+    await _read_entry(redis, stream, dlq_message_id, group)
     await redis.xdel(dlq_name(stream), dlq_message_id)
     logger.info(f"Discarded DLQ entry {dlq_message_id} from {dlq_name(stream)}")
 
@@ -178,6 +205,18 @@ async def _length(redis: RedisManager, name: str) -> int:
         return int(await redis.xlen(name))
     except Exception:
         return 0  # the stream does not exist until something is written to it
+
+
+async def _dlq_count(redis: RedisManager, stream: str, group: str) -> int:
+    """How many DLQ entries are of this group (the DLQ is small: entries are cleared)."""
+    try:
+        return sum(
+            1
+            for _, fields in await redis.xrange(dlq_name(stream))
+            if _belongs(fields, group)
+        )
+    except Exception:
+        return 0  # the DLQ does not exist until something fails
 
 
 async def stream_overview(
@@ -198,7 +237,7 @@ async def stream_overview(
         stream=stream,
         group=spec.group,
         length=await _length(redis, stream),
-        dlq_length=await _length(redis, dlq_name(stream)),
+        dlq_length=await _dlq_count(redis, stream, spec.group),
         consumers=consumers,
         pending=pending,
         lag=lag,
@@ -235,7 +274,9 @@ def make_streams_router(
 
     @router.get("/{stream_name}", response_model=list[DLQEntryRead])
     async def list_entries(stream_name: StreamName):  # type: ignore[valid-type]
-        return await list_dlq_entries(get_redis(), stream_name)
+        return await list_dlq_entries(
+            get_redis(), stream_name, streams[stream_name].group
+        )
 
     @router.post("/{stream_name}/{message_id}/replay", response_model=DLQReplayRead)
     async def replay(stream_name: StreamName, message_id: str):  # type: ignore[valid-type]
@@ -246,7 +287,9 @@ def make_streams_router(
 
     @router.delete("/{stream_name}/{message_id}", response_model=DLQDiscardRead)
     async def discard(stream_name: StreamName, message_id: str):  # type: ignore[valid-type]
-        await discard_dlq_entry(get_redis(), stream_name, message_id)
+        await discard_dlq_entry(
+            get_redis(), stream_name, message_id, streams[stream_name].group
+        )
         return {"status": "discarded", "message_id": message_id}
 
     return router
